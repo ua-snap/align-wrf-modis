@@ -3,9 +3,10 @@ def get_day_hours(month):
     return (month >= 9) & (month <= 17)
 
 if __name__ == '__main__':
-    import os
+    import os, glob
     import numpy as np
-    import xarray as xr 
+    import xarray as xr
+    import pandas as pd
     import datetime
 
     path = '/workspace/Shared/Tech_Projects/wrf_data/project_data/wrf_data/hourly_fix'
@@ -13,6 +14,7 @@ if __name__ == '__main__':
     variable = 'tsk'
 
     # mess with the begin / end dates for the MODIS data for comparison
+    # [ TODO ]: read this directly from the MOD/MYD NetCDF filenames to make it dynamic. 
     begin,end = (2000049,2018233)
     begin_dt = datetime.datetime( int(str(begin)[:4]),1,1 ) + datetime.timedelta( int(str(begin)[4:]) )
     end_dt = datetime.datetime( int(str(end)[:4]),1,1 ) + datetime.timedelta( int(str(end)[4:]) )
@@ -34,7 +36,7 @@ if __name__ == '__main__':
         ds = xr.open_mfdataset( group_files )
         fn = '_'.join(group_files[0].split('_')[:-1])+'.nc' # fn prep
         output_filename = os.path.join( output_path, os.path.basename(fn).replace('hourly','8Day_daytime') )
-
+        print( output_filename )
         with xr.open_mfdataset( group_files ) as ds:
 
             # get the hours we are interested in
