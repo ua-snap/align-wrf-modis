@@ -3,10 +3,6 @@ def open_raster( fn, band=1 ):
         arr = rst.read( band )
     return arr
 
-def dt_from_ordinal( year, ordinal ):
-    dt = datetime.datetime(year,1,1)
-    return dt + datetime.timedelta(ordinal)
-
 if __name__ == '__main__':
     import os, glob, datetime
     import numpy as np
@@ -43,7 +39,7 @@ if __name__ == '__main__':
         lon, lat = tmp_ds.lon, tmp_ds.lat
 
         # make a time coordinate
-        dates = pd.DatetimeIndex(df.loc[sensor].date.astype(str).apply( lambda x: dt_from_ordinal(int(x[:4]),int(x[4:]) ) ) )
+        dates = pd.DatetimeIndex(df.loc[sensor].date.astype(str).apply( lambda x: datetime.datetime.strptime(x, '%Y%j') ).tolist() )
 
         # make the new LST NetCDF dataset
         new_ds = xr.Dataset({'lst': (['time','yc', 'xc'], arr)},
@@ -51,7 +47,9 @@ if __name__ == '__main__':
                                     'yc': ('yc', yc.values),
                                     'lon':(['yc','xc'], lon.values ),
                                     'lat':(['yc','xc'], lat.values ),
-                                    'time':dates.ravel() })
+                                    'time':dates })
+
+        new_ds.lst.attrs = {'_FillValue':-9999}
 
         # add compression encoding
         encoding = new_ds[ 'lst' ].encoding
