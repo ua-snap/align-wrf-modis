@@ -33,7 +33,7 @@ def make_wrf_like_modis( files, meta_df, product ):
     dsbegin = pd.Timestamp( ds_sel.isel(time=0).time.values )
     dsend = pd.Timestamp( ds_sel.isel(time=-1).time.values )
 
-    if modbegin <= dsbegin:
+    if dsbegin <= modbegin:
         begin = modbegin
     else:
         begin = dsbegin
@@ -63,15 +63,11 @@ def make_wrf_like_modis( files, meta_df, product ):
     new_ds.tsk.encoding = ds_sel.tsk.encoding
     return new_ds
 
-def run_make_wrf_like_modis(x):
-    return make_wrf_like_modis(**x)
-
 def interpolate_leap_years( fn, year, tmp_path='/atlas_scratch/malindgren/TMP' ):
     # make an output path to dump the temporary intermediate file
     out_fn = os.path.join( tmp_path, os.path.basename(fn) )
     if os.path.exists( out_fn ):
         _ = os.unlink( out_fn )
-
     if calendar.isleap( year ):
         # fill it with a spline
         _ = fill_leap( fn, out_fn )
@@ -128,7 +124,8 @@ if __name__ == '__main__':
     import datetime
     import multiprocessing as mp
 
-    path = '/workspace/Shared/Tech_Projects/wrf_data/project_data/wrf_data/hourly_fix'
+    # path = '/workspace/Shared/Tech_Projects/wrf_data/project_data/wrf_data/hourly_fix'
+    path = '/storage01/malindgren/wrf_ccsm4/hourly_fix'
     output_path = '/workspace/Shared/Users/malindgren/MODIS_DATA/WRF_Day_hours/tsk'
     variable = 'tsk'
 
@@ -145,8 +142,8 @@ if __name__ == '__main__':
         begin,end = sensor_dates[ sensor ]
         begin_dt = datetime.datetime( int(str(begin)[:4]),1,1 ) + datetime.timedelta( int(str(begin)[4:]) )
         end_dt = datetime.datetime( int(str(end)[:4]),1,1 ) + datetime.timedelta( int(str(end)[4:]) )
-        begin = begin_dt.strftime('%Y-%m-%d')
-        end = end_dt.strftime('%Y-%m-%d')
+        begin = begin_dt.strftime( '%Y-%m-%d' )
+        end = end_dt.strftime( '%Y-%m-%d' )
         
         # list files we want within the range we want...
         files = [ fn for fn in glob.glob( os.path.join( path, variable, '*.nc' ) ) 
@@ -161,6 +158,5 @@ if __name__ == '__main__':
         grouped_files = df.sort_values('year').groupby(['model','scenario']).apply(lambda x: x.fn.tolist()).tolist()
         names = ['files', 'output_path', 'sensor']
         args = [ dict(zip(names,[group, output_path, sensor])) for group in grouped_files ]
-        _ = [a.update(meta_df=meta_df) for a in args]
-        break
-        out = [run(a) for a in args]
+        _ = [ a.update(meta_df=meta_df) for a in args ]
+        out = [ run(a) for a in args ]
