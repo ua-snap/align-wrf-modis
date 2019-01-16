@@ -1,3 +1,13 @@
+# # # # 
+# script to compare the MODIS and WRF Data that have been resampled temporally and regridded to 20km EPSG:3338
+# 
+# Before using this script you must:
+# 1. run resample_wrf_tsk_dayhours_to_8day_mean_min_max.py
+# 2. run resample_modis_warp_wrf.py
+#  then if these run successfully this analysis can begin.
+#
+# # # 
+
 def make_mask( shp_fn, meta ):
 	from rasterio.features import rasterize
 	shp = gpd.read_file(shp_fn)
@@ -104,7 +114,6 @@ if __name__ == '__main__':
 	# 	plt.cla()
 
 
-
 # Do A Series-length 2 week climatology -- this could be smarter by only looking at futures or something at a single time.
 groups = ['rcp85', 'historical']
 timelen = { 'rcp85':[2006,2018], 'historical':[2000,2015] }
@@ -115,19 +124,25 @@ for group in groups:
 	weeknums = twoweek_mean.index.map( lambda x: int(x.strftime('%W')) )
 	twoweek_clim = twoweek_mean.groupby(weeknums).mean()
 	
-	# get just the mean columns
-	cols = [ i for i in twoweek_clim.columns if 'mean' in i or 'lst_' in i ]
-	ax = twoweek_clim[cols].plot(kind='line', title='Compare MODIS LST and WRF TSK\nAveraged Across 2-week Intervals and All Years ({}-{})'.format( str(begin), str(end) ) )
+	# make df's for each group -- mean and min/max
+	twoweek_clim_mean = twoweek_clim[[ i for i in twoweek_clim.columns if 'mean' in i or 'lst_' in i]]
+	twoweek_clim_minmax = twoweek_clim[[ i for i in twoweek_clim.columns if 'min' in i or 'max' in i]]
+
+	# cleanup the mean colnames a bit for the legend, the others wont matter
+	twoweek_clim_mean.columns = [ i.replace('_mean','').replace('tsk_','').replace('lst_','') for i in twoweek_clim_mean.columns]
+
+	# plot the mean columns and grab the plotting axis
+	ax = twoweek_clim_mean.plot(kind='line', title='Compare MODIS LST and WRF TSK\nAveraged Across 2-week Intervals and All Years ({}-{})'.format( str(begin), str(end) ) )
 
 	# # # # pull apart some stuff here for use in fill_between semantics
 	models = {'rcp85':['GFDL-CM3', 'NCAR-CCSM4'], 'historical':['ERA-Interim']}
 
 	for model in models[group]:
 		# some column name -fu 
-		cols = [ i for i in twoweek_clim.columns if model in i ]
+		cols = [ i for i in twoweek_clim_minmax.columns if model in i ]
 		mincol, = [ i for i in cols if 'min' in i ]
 		maxcol, = [ i for i in cols if 'max' in i ]
-		ax.fill_between(np.array(twoweek_clim.index), twoweek_clim[mincol], twoweek_clim[maxcol], alpha=0.3)
+		ax.fill_between(np.array(twoweek_clim_minmax.index), twoweek_clim_minmax[mincol], twoweek_clim_minmax[maxcol], alpha=0.3)
 
 	# # # # END fill between step
 
