@@ -160,7 +160,7 @@ if __name__ == '__main__':
             # else:
             #     BaseException('wrong group')
 
-            # hardwired date groups since it was confusing and there are only so man groups to assess.
+            # hardwired date groups since it was confusing and there are only so many groups to assess.
             date_groups = {
                             'NCAR-CCSM4_rcp85_MOD11A2':('2006-01-02', '2018-09-01'),
                             'NCAR-CCSM4_rcp85_MYD11A2':('2006-01-02', '2018-09-01'),

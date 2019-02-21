@@ -54,101 +54,105 @@ if __name__ == '__main__':
 	sensors = ['MOD11A2']
 	metrics = ['mean','min','max']
 	
-	df_list = []
-	for model, scenario, sensor, metric in itertools.product(models,scenarios,sensors,metrics):
-		if model == 'ERA-Interim':
-			scenario = 'historical'
-
-		files = sorted(glob.glob(os.path.join(tsk_prepped,'*{}*{}*{}*{}*.tif'.format(model,scenario,metric,sensor))))
-
-		with rasterio.open(files[0]) as tmp:
-			meta = tmp.meta.copy()
-
-		# get the dates from the filenames 
-		datetimes = pd.DatetimeIndex([ make_datetime(fn) for fn in files ])
-
-		# make mask
-		mask = make_mask( shp_fn, meta )
-		f = functools.partial( extract_mean_aoi, mask=mask )
-		pool = mp.Pool( ncpus )
-		out = pool.map( f, files )
-		pool.close()
-		pool.join()
-
-		df_list	= df_list + [pd.DataFrame( {'tsk_{}_{}_{}'.format(model,scenario,metric):out}, index=datetimes )]
+	for shp_fn in glob.glob('/workspace/UA/malindgren/repos/modis_lst/ancillary/huc4_polygons_alaska_*.shp'):
+		huc_name = shp_fn.split('_')[-1].split('.')[0]
+		print( huc_name )
 		
-	# now get the lst values...
-	for sensor in sensors:
-		files = sorted(glob.glob(os.path.join(lst_prepped,'*{}*.tif'.format(sensor))))
-		# get the dates from the filenames 
-		datetimes = [ make_datetime_lst(fn) for fn in files ]
+		df_list = []
+		for model, scenario, sensor, metric in itertools.product(models,scenarios,sensors,metrics):
+			if model == 'ERA-Interim':
+				scenario = 'historical'
 
-		# make mask
-		mask = make_mask( shp_fn, meta )
-		f = functools.partial( extract_mean_aoi, mask=mask )
-		pool = mp.Pool( ncpus )
-		out = pool.map( f, files )
-		pool.close()
-		pool.join()
+			files = sorted(glob.glob(os.path.join(tsk_prepped,'*{}*{}*{}*{}*.tif'.format(model,scenario,metric,sensor))))
 
-		df = pd.DataFrame( {'lst_{}'.format(sensor):out}, index=datetimes )
+			with rasterio.open(files[0]) as tmp:
+				meta = tmp.meta.copy()
 
-		# bad_date = datetime.datetime.strptime('2000-08-04', '%Y-%m-%d').strftime('%Y%j')
-		# fn, = [fn for fn in files if bad_date in fn]
+			# get the dates from the filenames 
+			datetimes = pd.DatetimeIndex([ make_datetime(fn) for fn in files ])
 
-		df_list = df_list + [df]
+			# make mask
+			mask = make_mask( shp_fn, meta )
+			f = functools.partial( extract_mean_aoi, mask=mask )
+			pool = mp.Pool( ncpus )
+			out = pool.map( f, files )
+			pool.close()
+			pool.join()
 
-	# glue the df's together
-	df = df_list.pop(0)
-	df = df.join( df_list )
-	
-	# make celcius
-	df = df - 273.15
+			df_list	= df_list + [pd.DataFrame( {'tsk_{}_{}_{}'.format(model,scenario,metric):out}, index=datetimes )]
+			
+		# now get the lst values...
+		for sensor in sensors:
+			files = sorted(glob.glob(os.path.join(lst_prepped,'*{}*.tif'.format(sensor))))
+			# get the dates from the filenames 
+			datetimes = [ make_datetime_lst(fn) for fn in files ]
 
-	# for year in range(2001,2017):
-	# 	df_sel = df.copy().loc[slice('{}-01-01'.format(str(year)),'{}-12-31'.format(str(year)))].dropna(axis=1, how='all').copy()
-	# 	ax = df_sel.plot(kind='line', title='Compare MODIS LST and WRF TSK\nyear:{}'.format(str(year)))
-	# 	ax.set_ylabel('Temperature ($^\circ$C)')
-	# 	plt.savefig('/workspace/Shared/Users/malindgren/MODIS_DATA/comparison_plots/COMPARE_LST_TSK_ChenaRiver_HUC_{}.png'.format(year))
-	# 	plt.close()
-	# 	plt.cla()
+			# make mask
+			mask = make_mask( shp_fn, meta )
+			f = functools.partial( extract_mean_aoi, mask=mask )
+			pool = mp.Pool( ncpus )
+			out = pool.map( f, files )
+			pool.close()
+			pool.join()
+
+			df = pd.DataFrame( {'lst_{}'.format(sensor):out}, index=datetimes )
+
+			# bad_date = datetime.datetime.strptime('2000-08-04', '%Y-%m-%d').strftime('%Y%j')
+			# fn, = [fn for fn in files if bad_date in fn]
+
+			df_list = df_list + [df]
+
+		# glue the df's together
+		df = df_list.pop(0)
+		df = df.join( df_list )
+		
+		# make celcius
+		df = df - 273.15
+
+		# for year in range(2001,2017):
+		# 	df_sel = df.copy().loc[slice('{}-01-01'.format(str(year)),'{}-12-31'.format(str(year)))].dropna(axis=1, how='all').copy()
+		# 	ax = df_sel.plot(kind='line', title='Compare MODIS LST and WRF TSK\nyear:{}'.format(str(year)))
+		# 	ax.set_ylabel('Temperature ($^\circ$C)')
+		# 	plt.savefig('/workspace/Shared/Users/malindgren/MODIS_DATA/comparison_plots/COMPARE_LST_TSK_ChenaRiver_HUC_{}.png'.format(year))
+		# 	plt.close()
+		# 	plt.cla()
 
 
-# Do A Series-length 2 week climatology -- this could be smarter by only looking at futures or something at a single time.
-groups = ['rcp85', 'historical']
-timelen = { 'rcp85':[2006,2018], 'historical':[2000,2015] }
-for group in groups:
-	begin,end = timelen[group]
-	sub_df = df.loc[slice(str(begin),str(end))][[ i for i in df.columns if group in i or 'lst_' in i  ]].copy()
-	twoweek_mean = sub_df.resample('2W').mean()
-	weeknums = twoweek_mean.index.map( lambda x: int(x.strftime('%W')) )
-	twoweek_clim = twoweek_mean.groupby(weeknums).mean()
-	
-	# make df's for each group -- mean and min/max
-	twoweek_clim_mean = twoweek_clim[[ i for i in twoweek_clim.columns if 'mean' in i or 'lst_' in i]]
-	twoweek_clim_minmax = twoweek_clim[[ i for i in twoweek_clim.columns if 'min' in i or 'max' in i]]
+		# Do A Series-length 2 week climatology -- this could be smarter by only looking at futures or something at a single time.
+		groups = ['rcp85', 'historical']
+		timelen = { 'rcp85':[2006,2018], 'historical':[2000,2015] }
+		for group in groups:
+			begin,end = timelen[group]
+			sub_df = df.loc[slice(str(begin),str(end))][[ i for i in df.columns if group in i or 'lst_' in i  ]].copy()
+			twoweek_mean = sub_df.resample('2W').mean()
+			weeknums = twoweek_mean.index.map( lambda x: int(x.strftime('%W')) )
+			twoweek_clim = twoweek_mean.groupby(weeknums).mean()
+			
+			# make df's for each group -- mean and min/max
+			twoweek_clim_mean = twoweek_clim[[ i for i in twoweek_clim.columns if 'mean' in i or 'lst_' in i]]
+			twoweek_clim_minmax = twoweek_clim[[ i for i in twoweek_clim.columns if 'min' in i or 'max' in i]]
 
-	# cleanup the mean colnames a bit for the legend, the others wont matter
-	twoweek_clim_mean.columns = [ i.replace('_mean','').replace('tsk_','').replace('lst_','') for i in twoweek_clim_mean.columns]
+			# cleanup the mean colnames a bit for the legend, the others wont matter
+			twoweek_clim_mean.columns = [ i.replace('_mean','').replace('tsk_','').replace('lst_','') for i in twoweek_clim_mean.columns]
 
-	# plot the mean columns and grab the plotting axis
-	ax = twoweek_clim_mean.plot(kind='line', title='Compare MODIS LST and WRF TSK\nAveraged Across 2-week Intervals and All Years ({}-{})'.format( str(begin), str(end) ) )
+			# plot the mean columns and grab the plotting axis
+			ax = twoweek_clim_mean.plot(kind='line', title='Compare MODIS LST and WRF TSK\nAveraged Across 2-week Intervals and All Years ({}-{})'.format( str(begin), str(end) ) )
 
-	# # # # pull apart some stuff here for use in fill_between semantics
-	models = {'rcp85':['GFDL-CM3', 'NCAR-CCSM4'], 'historical':['ERA-Interim']}
+			# # # # pull apart some stuff here for use in fill_between semantics
+			model_names = {'rcp85':['GFDL-CM3', 'NCAR-CCSM4'], 'historical':['ERA-Interim']}
 
-	for model in models[group]:
-		# some column name -fu 
-		cols = [ i for i in twoweek_clim_minmax.columns if model in i ]
-		mincol, = [ i for i in cols if 'min' in i ]
-		maxcol, = [ i for i in cols if 'max' in i ]
-		ax.fill_between(np.array(twoweek_clim_minmax.index), twoweek_clim_minmax[mincol], twoweek_clim_minmax[maxcol], alpha=0.3)
+			for model_name in model_names[group]:
+				# some column name -fu 
+				cols = [ i for i in twoweek_clim_minmax.columns if model_name in i ]
+				mincol, = [ i for i in cols if 'min' in i ]
+				maxcol, = [ i for i in cols if 'max' in i ]
+				ax.fill_between(np.array(twoweek_clim_minmax.index), twoweek_clim_minmax[mincol], twoweek_clim_minmax[maxcol], alpha=0.3)
 
-	# # # # END fill between step
+			# # # # END fill between step
 
-	ax.set_ylabel('Temperature ($^\circ$C)')
-	ax.set_xlabel('Week of the Year')
-	plt.savefig('/workspace/Shared/Users/malindgren/MODIS_DATA/comparison_plots/COMPARE_LST_TSK_ChenaRiver_HUC_twoweek_climatology_{}_{}-{}.png'.format(group, str(begin), str(end)))
-	plt.close()
-	plt.cla()
+			ax.set_ylabel('Temperature ($^\circ$C)')
+			ax.set_xlabel('Week of the Year')
+			plt.savefig('/workspace/Shared/Users/malindgren/MODIS_DATA/comparison_plots/compare_LST_TSK_{}_twoweek_climatology_{}_{}-{}.png'.format(huc_name, group, str(begin), str(end)))
+			plt.close()
+			plt.cla()
 
