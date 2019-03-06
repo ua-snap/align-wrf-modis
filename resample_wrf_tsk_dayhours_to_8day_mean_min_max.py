@@ -10,22 +10,22 @@ def get_day_hours( month ):
 def get_year_from_fn( fn ):
     return int(os.path.basename(fn).split('.nc')[0].split('_')[-1])
 
-def fill_leap( fn, out_fn ):
+def fill_leap( fn, out_fn, variable ):
     with xr.open_dataset( fn ) as ds:
         ds_filled = ds.resample(time='1H').interpolate('slinear')
-        ds_filled.tsk.encoding = ds.tsk.encoding
+        ds_filled[variable].encoding = ds[variable].encoding
         ds_filled.to_netcdf(out_fn)
         ds_filled.close(); ds_filled = None
     return out_fn
 
-def interpolate_leap_years( fn, year, tmp_path='/atlas_scratch/malindgren/TMP' ):
+def interpolate_leap_years( fn, year, variable, tmp_path='/atlas_scratch/malindgren/TMP' ):
     # make an output path to dump the temporary intermediate file
     out_fn = os.path.join( tmp_path, os.path.basename(fn) )
     if os.path.exists( out_fn ):
         _ = os.unlink( out_fn )
     if calendar.isleap( year ):
         # fill it with a spline
-        _ = fill_leap( fn, out_fn )
+        _ = fill_leap( fn, out_fn, variable )
     else:
         # copy the file to the temp location for speed the symlinks were very slow.
         _ = shutil.copy( fn, out_fn )
@@ -34,7 +34,7 @@ def interpolate_leap_years( fn, year, tmp_path='/atlas_scratch/malindgren/TMP' )
 def run_interpolate_leap_years(x):
     return interpolate_leap_years(*x)
 
-def make_wrf_like_modis( files, meta_df, metric, product, begin, end ):
+def make_wrf_like_modis( files, meta_df, metric, product, begin, end, variable ):
     ds = xr.open_mfdataset( files )
     ds_sel = ds.sel( time=get_day_hours(ds['time.hour']) )
     
@@ -62,11 +62,11 @@ def make_wrf_like_modis( files, meta_df, metric, product, begin, end ):
                                     row['RANGEENDINGDATE']+'T'+row['RANGEENDINGTIME']), axis=1 )
 
     if metric == 'mean':
-        out_arr = np.array([ ds_sel.sel(time=sl).mean('time').tsk.values for sl in slices ])
+        out_arr = np.array([ ds_sel.sel(time=sl).mean('time')[variable].values for sl in slices ])
     elif metric == 'min':
-        out_arr = np.array([ ds_sel.sel(time=sl).min('time').tsk.values for sl in slices ])
+        out_arr = np.array([ ds_sel.sel(time=sl).min('time')[variable].values for sl in slices ])
     elif metric == 'max':
-        out_arr = np.array([ ds_sel.sel(time=sl).max('time').tsk.values for sl in slices ])
+        out_arr = np.array([ ds_sel.sel(time=sl).max('time')[variable].values for sl in slices ])
 
     new_times = pd.DatetimeIndex(group['date'].astype(str).apply(lambda x: datetime.datetime.strptime(str(x), '%Y%j')).tolist())
 
@@ -76,10 +76,10 @@ def make_wrf_like_modis( files, meta_df, metric, product, begin, end ):
                                 'yc': ('yc', ds_sel.yc.values),
                                 'time':new_times })
 
-    new_ds.tsk.encoding = ds_sel.tsk.encoding
+    new_ds[variable].encoding = ds_sel[variable].encoding
     return new_ds
 
-def modisify_wrf( files, output_path, sensor, meta_df, metric, begin, end, ncpus=7 ):
+def modisify_wrf( files, output_path, sensor, meta_df, metric, begin, end, variable, ncpus=7 ):
     ''' make the WRF data temporally look like MODIS LST 8-Day composite Daytime'''
     fn = '_'.join(files[0].split('_')[:-1])+'_{}_{}.nc'.format(metric,sensor)
     output_filename = os.path.join( output_path, os.path.basename(fn).replace('hourly','8Day_daytime') )
@@ -88,14 +88,14 @@ def modisify_wrf( files, output_path, sensor, meta_df, metric, begin, end, ncpus
     # this whole piece is a way for us to interpolate a leapday for comparison...
     # # WRF has NOLEAP calendar and there is no way to properly aggregate using xarray semantics without adding it.
     years = [ get_year_from_fn(fn) for fn in files ]
-    args = [ (fn, year) for fn,year in zip(files,years) ]
+    args = [ (fn, year, variable) for fn,year in zip(files,years) ]
     pool = mp.Pool( ncpus )
     fixed_files = pool.map( run_interpolate_leap_years, args )
     pool.close()
     pool.join()
 
     # resample the data following begin / end times from the MODIS file metadata for 8-day composites
-    ds_res = make_wrf_like_modis( fixed_files, meta_df, metric, product=sensor, begin=begin, end=end )
+    ds_res = make_wrf_like_modis( fixed_files, meta_df, metric, product=sensor, begin=begin, end=end, variable=variable )
 
     # make sure the output path exists
     dirname = os.path.dirname( output_filename )
@@ -125,8 +125,8 @@ if __name__ == '__main__':
     import multiprocessing as mp
 
     paths = ['/workspace/Shared/Tech_Projects/wrf_data/project_data/wrf_data/hourly_fix','/storage01/malindgren/wrf_ccsm4/hourly_fix']
-    output_path = '/workspace/Shared/Users/malindgren/MODIS_DATA/WRF_Day_hours/tsk'
-    variable = 'tsk'
+    variable = 't2'
+    output_path = os.path.join('/workspace/Shared/Users/malindgren/MODIS_DATA/WRF_Day_hours', variable)
     metrics = ['mean','max','min']
 
     # mess with the begin / end dates for the MODIS data for comparison [this is now only partially used...  Harwire was more sane.]
@@ -188,7 +188,7 @@ if __name__ == '__main__':
 
             # group and sort the files 
             files = df.sort_values('year').fn.tolist()
-            names = ['files', 'output_path', 'sensor','metric','meta_df','begin','end',]
-            args = dict(zip(names,[files, output_path, sensor, metric,meta_df,begin,end]))
+            names = ['files', 'output_path', 'sensor','metric','meta_df','begin','end','variable',]
+            args = dict(zip(names,[files, output_path, sensor, metric,meta_df,begin,end,variable,]))
             out = run( args )
             
