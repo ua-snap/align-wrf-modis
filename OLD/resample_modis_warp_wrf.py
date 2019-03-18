@@ -84,9 +84,8 @@ if __name__ == '__main__':
 	import numpy as np
 	import multiprocessing as mp
 
-	variable = 't2'
-	wrf_path = os.path.join('/workspace/Shared/Users/malindgren/MODIS_DATA/WRF_Day_hours', variable)
-	out_path = '/workspace/Shared/Users/malindgren/MODIS_DATA/WRF_Day_hours/{}_20km_3338_lanczos'.format(variable)
+	wrf_path = '/workspace/Shared/Users/malindgren/MODIS_DATA/WRF_Day_hours/tsk'
+	out_path = '/workspace/Shared/Users/malindgren/MODIS_DATA/WRF_Day_hours/tsk_20km_3338_lanczos'
 	template_fn = '/workspace/Shared/Users/malindgren/MODIS_DATA/modis_prepped_20km_3338_lanczos/MOD11A2_A2005257_InteriorAK_006_2015261161547_01_20km_3338.tif'
 	groups = ['ERA-Interim_historical', 'GFDL-CM3_historical', 'GFDL-CM3_rcp85','NCAR-CCSM4_historical', 'NCAR-CCSM4_rcp85']
 	groups = ['NCAR-CCSM4_rcp85'] # to re-do this one for some reason it failed.
@@ -98,7 +97,7 @@ if __name__ == '__main__':
 		# group, sensor, metric = ['ERA-Interim_historical','MYD11A2','min']
 		wrf_fn, = glob.glob( os.path.join( wrf_path, '*{}_{}_{}.nc'.format(group,metric,sensor) ) )
 		ds = xr.open_dataset( wrf_fn )
-		da = ds[variable]
+		da = ds['tsk']
 		bands,rows,cols = da.shape
 		res = (20000.0,20000.0)
 		transform = rasterio.transform.from_origin( ds.xc.data.min()-(res[0]/2.), ds.yc.data.max()+(res[0]/2.), res[0], res[1] )
@@ -115,15 +114,17 @@ if __name__ == '__main__':
 		# make output_filenames for wrf to gtiff
 		times = ds.time.to_index()
 		jdates = list(times.map(lambda x: x.strftime('%Y%j')))
-		out_files = [os.path.join( out_path,'{}_8Day_daytime_wrf_{}_{}_{}_{}.tif'.format(variable,group,metric,sensor,jdate) ) for jdate in jdates]
+		out_files = [os.path.join( out_path,'tsk_8Day_daytime_wrf_{}_{}_{}_{}.tif'.format(group,metric,sensor,jdate) ) for jdate in jdates]
 
 		# make args
 		args = [(a, meta, out_fn, template_fn) for a, out_fn in zip(list(da.values),out_files) ]
 
-		pool = mp.Pool( 16 )
+		pool = mp.Pool( 32 )
 		out = pool.map( wrapper, args )
 		pool.close()
 		pool.join()
+
+		# break
 
 		# now put these new GTiffs into a large multiband file...
 		def open_raster( fn, band=1 ): 
@@ -140,7 +141,7 @@ if __name__ == '__main__':
 			new_meta.update(compress='lzw', count=new_arr.shape[0])
 
 		# os.mkdir(out_path+'_multiband')
-		with rasterio.open( os.path.join( out_path+'_multiband','{}_8Day_daytime_wrf_{}_{}_{}_3338_multiband.tif'.format(variable, group, metric, sensor)), 'w', **new_meta ) as out:
+		with rasterio.open( os.path.join( out_path+'_multiband','tsk_8Day_daytime_wrf_{}_{}_{}_3338_multiband.tif'.format(group, metric, sensor)), 'w', **new_meta ) as out:
 			out.write( new_arr )
 
 		tmp = None

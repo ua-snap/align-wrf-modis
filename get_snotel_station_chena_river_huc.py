@@ -6,9 +6,12 @@ if __name__ == '__main__':
 	from shapely.geometry import Point
 	import numpy as np
 
-	fn = '/Users/malindgren/Documents/repos/modis_lst/ancillary/SNOTEL_points_all.csv'
-	# output_path = '/workspace/Shared/Tech_Projects/SERDP_Fish_Fire/project_data/chena_river_huc_stations_extracted/snotel'
-	output_path = '/Users/malindgren/Documents/TEMP'
+	base_path = '/workspace/Shared/Tech_Projects/SERDP_Fish_Fire/project_data'
+	fn = os.path.join(base_path, 'STATION_DATA', 'snotel', 'SNOTEL_points_all.csv')
+	output_path = os.path.join(base_path,'STATION_DATA','snotel','prepped')
+	
+	if not os.path.exists(output_path):
+		_ = os.makedirs(output_path)
 
 	df = pd.read_csv( fn )
 	df['geometry'] = df.apply( lambda x: Point(x.Longitude, x.Latitude), axis=1 )
@@ -18,17 +21,19 @@ if __name__ == '__main__':
 	# subset to remove some junk
 	df = df[['Name','State' ,'ID', 'Longitude', 'Latitude', 'geometry']]
 
+	# make a shapefile with all of the data...
 	pts = gpd.GeoDataFrame(df, geometry='geometry')
-	pts.to_file('/Users/malindgren/Documents/repos/modis_lst/ancillary/SNOTEL_points_all.shp')
+	pts.to_file(os.path.join(base_path, 'STATION_DATA', 'snotel', 'SNOTEL_points_all.shp'))
 	
-	huc_fn = '/Users/malindgren/Documents/repos/modis_lst/ancillary/chena_river_huc_19040506.shp'
+	# read in the huc polygon we are using for the test-case.
+	huc_fn = os.path.join(base_path, 'shapefiles','chena_river_huc_19040506.shp')
 	huc = gpd.read_file( huc_fn )
 	huc = huc.to_crs( epsg=4326 )
 
 	# now find which ones intersect
 	ak_pts = pts[pts.geometry.apply(lambda x: x.intersects(huc.geometry[0]))]
-	ak_pts.to_file('/Users/malindgren/Documents/repos/modis_lst/ancillary/SNOTEL_points_chena_river_huc.shp')
-
+	ak_pts.to_file(os.path.join(base_path, 'STATION_DATA', 'snotel', 'SNOTEL_points_chena_river_huc.shp'))
+	
 	# get the data
 	import requests
 	station_files = []
@@ -106,7 +111,7 @@ if __name__ == '__main__':
 		out_df = pd.concat(out_data, axis=1)
 		# rescale the temps to celcius from fahrenheit
 		out_df = ((out_df - 32.0) * 5.0 / 9.0).round(1) # make celcius
-		out_fn = os.path.join(output_path, 'SNOTEL', 'prepped','SNOTEL_points_chena_river_huc_{}.csv'.format(metric.lower()) )
+		out_fn = os.path.join(output_path,'STAT' ,'prepped','SNOTEL_points_chena_river_huc_{}.csv'.format(metric.lower()) )
 		out_df.to_csv( out_fn )
 		
 

@@ -5,8 +5,8 @@ from matplotlib import pyplot as plt
 import os, glob, itertools
 import pandas as pd
 
-path = '/workspace/Shared/Tech_Projects/SERDP_Fish_Fire/project_data/chena_river_huc_stations_extracted'
-out_path = '/workspace/Shared/Tech_Projects/SERDP_Fish_Fire/project_data/chena_river_huc_stations_plots'
+path = '/Users/malindgren/Documents/TEMP/SNOTEL/prepped'
+out_path = '/Users/malindgren/Documents/TEMP/SNOTEL/plots'
 scenarios = ['rcp85','historical']
 variables = ['tmax', 'tavg', 'tmin']
 
@@ -15,7 +15,8 @@ for scenario,variable in itertools.product(scenarios, variables):
 	lst_files = glob.glob(os.path.join(path, 'MOD11A2_lst_*.csv'))
 	files = glob.glob( os.path.join(path, '{}*{}*.csv'.format(variable, scenario)))
 	files = files + acis_files + lst_files
-	for station in ['AKFAIRBANKSAP2','AKFTKNOXMINE','AKUNIVERSITYEXPSTN','AKFAIRBANKSINTLAP']:
+	for station in ['FairbanksFO', 'LittleChenaRidge', 'MonumentCreek', 'MtRyan', 'MunsonRidge', 'TeuchetCreek', 'UpperChena']:
+		break
 		out_fn = os.path.join( out_path, '{}_{}_{}.png'.format(variable, scenario, station) )
 		hold = []
 		for fn in files:
