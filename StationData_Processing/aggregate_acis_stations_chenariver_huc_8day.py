@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 base_path = '/workspace/Shared/Tech_Projects/SERDP_Fish_Fire/project_data'
-acis_path = os.path.join(base_path,'STATION_DATA','acis', 'raw')
+acis_path = os.path.join(base_path,'STATION_DATA','acis', 'prepped')
 output_path = os.path.join(base_path,'STATION_DATA','acis', '8day')
 
 if not os.path.exists( output_path ):
@@ -15,18 +15,15 @@ meta_df = pd.read_csv(os.path.join(base_path,'MODIS_DATA','ancillary','MODIS_LST
 
 # list the acis files that have been output:
 files = glob.glob(os.path.join(acis_path, '*.csv'))
-sensor = 'MOD11A2'
+sensor = 'MOD11A2' # use the longer of the 2 series to have the longest needed for both as the other dates are the same
 meta_df['year'] = meta_df['date'].apply( lambda x: int(str(x)[:4]) )
 meta_df = meta_df[meta_df['product'] == sensor]
 avg_groups = [ list(row[['RANGEBEGINNINGDATE','RANGEENDINGDATE']]) for idx,row in meta_df.iterrows() ]
 
 for fn in files:
     df = pd.read_csv( fn, index_col=0 )
-    df = df.replace('M', np.nan)
-    df = df.replace('T', '.001')
-    df = df.astype(float)
+    df = df.astype(np.float32)
 
-    df = (df - 32.0) * 5.0 / 9.0 # make celcius
     dat = {}
     for mod_begin, mod_end in avg_groups:
         test = df.loc[slice(mod_begin, mod_end)]
