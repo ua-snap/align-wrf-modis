@@ -1,0 +1,12 @@
+<VRTDataset rasterXSize="339" rasterYSize="209">
+  <Metadata domain="GEOLOCATION">
+    <MDI key="X_DATASET">{}/lon.vrt</MDI>
+    <MDI key="X_BAND">1</MDI>
+    <MDI key="Y_DATASET">{}/lat.vrt</MDI>
+    <MDI key="Y_BAND">1</MDI>
+    <MDI key="PIXEL_OFFSET">0</MDI>
+    <MDI key="LINE_OFFSET">0</MDI>
+    <MDI key="PIXEL_STEP">1</MDI>
+    <MDI key="LINE_STEP">1</MDI>
+  </Metadata>{}
+</VRTDataset>
