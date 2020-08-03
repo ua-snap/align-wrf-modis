@@ -1,0 +1,12 @@
+<VRTDataset rasterXSize="339" rasterYSize="209">
+  <VRTRasterBand dataType="Float32" band="1">
+    <Metadata />
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">NETCDF:aggr.nc:{}</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="339" RasterYSize="209" DataType="Float32" BlockXSize="339" BlockYSize="209" />
+      <SrcRect xOff="0" yOff="0" xSize="339" ySize="309" />
+      <DstRect xOff="0" yOff="0" xSize="339" ySize="309" />
+    </SimpleSource>
+  </VRTRasterBand>
+</VRTDataset>
