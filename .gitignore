@@ -4,7 +4,7 @@ set_vars
 # storing venv in project (new venv was being created in interactive job)
 .venv
 
-.ipynb_checkpoints/*
+**.ipynb_checkpoints
 **/__pycache__
 
 # OSX stuff
