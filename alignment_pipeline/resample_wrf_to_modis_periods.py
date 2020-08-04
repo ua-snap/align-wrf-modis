@@ -33,7 +33,7 @@ def get_files(wrf_dir, group, begin_year, end_year):
         ]
     )
     # NOTE FOR FUTURE VERSIONS:
-    # code below omits duplicate July 2 files (gfdl/ccsm), taking first 
+    # code below omits duplicate July 2 files (gfdl/ccsm), taking first
     #   occurrence as desired file. This should be removed when duplicate files
     #   ar removed from raw data directories.
     fns = [os.path.basename(fp) for fp in files]
@@ -54,9 +54,7 @@ def get_drop_vars(fp, keep_vars):
     return drop_vars
 
 
-def make_wrf_like_modis(
-    ds_sel, ds_coords, meta_df, metric, product, variable
-):
+def make_wrf_like_modis(ds_sel, ds_coords, meta_df, metric, product, variable):
     """ resample (temporal) WRF hourlies to the MODIS ranges used in 8-day compositing. """
     # sort the values -- probably unnecessary, but is here.
     meta_df = meta_df.sort_values("date")
@@ -110,16 +108,22 @@ def make_warp_files(temp_dir, nt):
     """make VRT files needed for gdalwarp with -geoloc"""
     # make lat/lon VRT files
     coords = ["lat", "lon"]
-    with open("WRF_Processing/vrt_template_latlon.txt", "r") as template_file:
+    with open(
+        "alignment_pipeline/vrt_template/vrt_template_latlon.txt", "r"
+    ) as template_file:
         template = template_file.read()
         for coord in coords:
             vrt_file = open(os.path.join(temp_dir, "{}.vrt".format(coord)), "w")
             vrt_file.write(template.format(coord))
             vrt_file.close()
     # make dataset VRT file
-    with open("WRF_Processing/vrt_template_meta.txt", "r") as template_file:
+    with open(
+        "alignment_pipeline/vrt_template/vrt_template_meta.txt", "r"
+    ) as template_file:
         meta_text = template_file.read()
-    with open("WRF_Processing/vrt_template_band.txt", "r") as template_file:
+    with open(
+        "alignment_pipeline/vrt_template/vrt_template_band.txt", "r"
+    ) as template_file:
         band_text = template_file.read()
     bands_text = "".join([band_text.format(i + 1, i + 1) for i in np.arange(nt)])
     vrt_text = meta_text.format(temp_dir, temp_dir, bands_text)
@@ -190,16 +194,12 @@ def modisify_wrf(
     )
     # open file with lat/lon info
     drop_vars_coords = get_drop_vars(files[0], [variable, "lat", "lon"])
-    ds_coords = xr.open_dataset(
-        files[0], drop_variables=drop_vars_coords
-    )
+    ds_coords = xr.open_dataset(files[0], drop_variables=drop_vars_coords)
     # get model
     model = files[0].split("_")[0].split("/")[-3]
     # iterate through metrics
     for metric in metrics:
-        fn = "{}_8Day_daytime_wrf_{}_{}_{}.nc".format(
-            variable, model, metric, sensor
-        )
+        fn = "{}_8Day_daytime_wrf_{}_{}_{}.nc".format(variable, model, metric, sensor)
         out_fp = os.path.join(out_dir, fn)
 
         ds_res = make_wrf_like_modis(
@@ -211,9 +211,7 @@ def modisify_wrf(
         # write to temp folder for gdalwarp, cleanup
         print("writing temp 8-Day netcdf, aggregate:{}".format(metric), end="...")
         tic = time.perf_counter()
-        ds_res.to_netcdf(
-            os.path.join(temp_dir, "aggr.nc"), mode="w", format="NETCDF4"
-        )
+        ds_res.to_netcdf(os.path.join(temp_dir, "aggr.nc"), mode="w", format="NETCDF4")
 
         # move data timeseries to separate file
         out_ts_fp = out_fp.replace(".nc", "_times.csv")
@@ -230,6 +228,7 @@ def modisify_wrf(
         warp_with_geoloc(temp_dir, nt, out_fp)
         print("done,", round(time.perf_counter() - tic, 1), "s")
         print(out_fp)
+
 
 return out_fp
 
@@ -327,15 +326,7 @@ if __name__ == "__main__":
         args = dict(
             zip(
                 names,
-                [
-                    files,
-                    temp_dir,
-                    out_dir,
-                    sensor,
-                    metrics,
-                    meta_df_sub,
-                    variable,
-                ],
+                [files, temp_dir, out_dir, sensor, metrics, meta_df_sub, variable,],
             )
         )
         print("running modisification")
