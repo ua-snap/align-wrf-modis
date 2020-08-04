@@ -44,7 +44,7 @@ def concat_bands(ds, variable):
             "xc": ("xc", ds["lon"].values),
             "yc": ("yc", np.flip(ds["lat"].values)),
             "time": np.arange(len(varnames) - 3),
-        }
+        },
     )
     return ds_new
 
@@ -105,7 +105,9 @@ def reproject_wrf_to_modis_20km(fn, out_fn):
 
 def reproject_wrf_to_3338(fp, out_fp):
     print(out_fp)
-    _ = subprocess.call(["gdalwarp", "-t_srs", "epsg:3338", "-q", "-overwrite", fp, out_fp])
+    _ = subprocess.call(
+        ["gdalwarp", "-t_srs", "epsg:3338", "-q", "-overwrite", fp, out_fp]
+    )
     with rio.open(out_fp, mode="r+") as out:
         arr = out.read(1)
         arr[arr == 0] = -9999
@@ -160,7 +162,9 @@ if __name__ == "__main__":
         out_dir = os.path.join(
             os.getenv("OUTPUT_DIR"), "WRF", "{}_20km_3338_lanczos".format(variable)
         )
-        template_fp = glob.glob(os.path.join(scratch_dir,'MODIS','modis_20km_3338_lanczos', '*.tif'))[0]
+        template_fp = glob.glob(
+            os.path.join(scratch_dir, "MODIS", "modis_20km_3338_lanczos", "*.tif")
+        )[0]
     elif wrf_env_var == "WRF_1KM_DIR":
         out_dir = os.path.join(
             os.getenv("OUTPUT_DIR"), "WRF", "{}_1km_3338".format(variable)
@@ -170,7 +174,7 @@ if __name__ == "__main__":
     out_dir_multi = out_dir + "_multiband"
     if not os.path.exists(out_dir_multi):
         _ = os.makedirs(out_dir_multi)
-    
+
     wrf_dir = os.path.join(scratch_dir, "WRF", "WRF_day_hours", variable)
     # out_dir = os.path.join(scratch_dir, "WRF", "WRF_day_hours", variable)
 
@@ -189,7 +193,7 @@ if __name__ == "__main__":
         # use subdir for each set of gtiffs
         set_dir = os.path.join(out_dir, "{}_{}_{}".format(group, metric, sensor))
         if not os.path.exists(set_dir):
-            _ = os.makedirs(set_dir)    
+            _ = os.makedirs(set_dir)
         # open modisified data
         wrf_fp = glob.glob(
             os.path.join(wrf_dir, "*{}_{}_{}.nc".format(group, metric, sensor))
@@ -199,8 +203,8 @@ if __name__ == "__main__":
         if wrf_env_var == "WRF_1KM_DIR":
             # in case of 1km WRF, the bands (dates) are separate subdatasets from gdalwarp
             print("concatenating bands...", end="")
-            ds = concat_bands(ds, variable) 
-            print("done")            
+            ds = concat_bands(ds, variable)
+            print("done")
 
         meta = get_metadata(ds, wrf_fp, wrf_env_var, variable)
         out_fps = get_output_filepaths(ds, wrf_fp, set_dir, wrf_env_var)
@@ -246,14 +250,17 @@ if __name__ == "__main__":
 
         # and (2) netcdf
         print("writing netcdf: {}".format(out_mb_fp.replace(".tif", ".nc")), end="...")
-        dates = np.array([datetime.strptime(fp.split("_")[-2], "%Y%j") for fp in bands_fps])
-        mb_ds = xr.Dataset({variable: (["date", "yc", "xc"], bands_arr)},
-            coords={"date": dates, "yc": yc, "xc": xc})
-        mb_ds.to_netcdf(out_mb_fp.replace(".tif", ".nc"), "w", "NETCDF4")      
+        dates = np.array(
+            [datetime.strptime(fp.split("_")[-2], "%Y%j") for fp in bands_fps]
+        )
+        mb_ds = xr.Dataset(
+            {variable: (["date", "yc", "xc"], bands_arr)},
+            coords={"date": dates, "yc": yc, "xc": xc},
+        )
+        mb_ds.to_netcdf(out_mb_fp.replace(".tif", ".nc"), "w", "NETCDF4")
         print("done")
 
         tmp = None
         out = None
         del bands_arr, tmp, out
-
 
