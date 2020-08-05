@@ -1,5 +1,5 @@
 """
-Re-grid the mosaicked, reprojected and rescaled MODIS files 
+Clip the mosaicked, reprojected and rescaled MODIS files 
 to the 1km WRF grid, producing the final MODIS data
 """
 
@@ -11,16 +11,17 @@ import os, glob, subprocess, itertools, datetime
 from helpers import check_env
 
 
-def warp_modis(fp, out_fp, template_fp):
-    print(fp)
-    print(out_fp)
-    with rio.open(template_fp) as tmp:
-        arr = np.empty_like(tmp.read())
-        tmp_meta = tmp.meta
-    with rio.open(out_fp, "w", **tmp_meta) as rst:
-        rst.write(arr)
+def make_cutline(template_fp, temp_dir):
+    shp_fp = os.path.join(temp_dir, "clip_modis.shp")
     _ = subprocess.call(
-        ["gdalwarp", "-s_srs", "epsg:3338", "-q", "-r", "near", fp, out_fp]
+        ["gdaltindex", shp_fp, template_fp]
+    )
+    return shp_fp
+
+
+def clip_modis(shp_fp, fp, out_fp):
+    _ = subprocess.call(
+        ["gdalwarp", "-cutline", shp_fp, "-crop_to_cutline", "-overwrite", fp, out_fp]
     )
     with rio.open(out_fp, mode="r+") as out:
         arr = out.read(1)
@@ -53,19 +54,16 @@ if __name__ == "__main__":
     wrf_var = "tsk"
     mod_var = "lst"
     scratch_dir = os.getenv("SCRATCH_DIR")
+    temp_dir = os.path.join(scratch_dir, "temp")
     out_base_dir = os.getenv("OUTPUT_DIR")
-
     modis_dir = os.path.join(scratch_dir, "MODIS", "rescaled")
-
-    out_dir = os.path.join(out_base_dir, "MODIS", "{}_1km_3338_lanczos".format(mod_var))
+    out_dir = os.path.join(out_base_dir, "MODIS", "{}_1km_3338".format(mod_var))
     if not os.path.exists(out_dir):
         _ = os.makedirs(out_dir)
-
     wrf_dir = os.path.join(
-        out_base_dir, "WRF", "{}_1km_3338".format(wrf_var), "era_mean_MOD11A2"
+        scratch_dir, "WRF", "{}_1km_3338".format(wrf_var), "era_mean_MOD11A2"
     )
     template_fp = os.path.join(wrf_dir, os.listdir(wrf_dir)[0])
-
     modis_fps = sorted(
         [
             os.path.join(modis_dir, fn)
@@ -74,11 +72,16 @@ if __name__ == "__main__":
         ]
     )
 
+    # make cutline fp
+    shp_fp = make_cutline(template_fp, temp_dir)
+
     for fp in modis_fps:
         fn = os.path.basename(fp)
         print("working on", fn[:16])
         out_fp = os.path.join(out_dir, fn)
-        warp_modis(fp, out_fp, template_fp)
+        clip_modis(shp_fp, fp, out_fp,)
+
+    _ = os.unlink(shp_fp)
 
     # assemble files into geotiffs and netcdf
     print("Making geotiffs and netcdfs")
@@ -94,7 +97,7 @@ if __name__ == "__main__":
             idx = np.arange(tmp.width)
             idy = np.arange(tmp.height)
             xc = tmp.xy(np.repeat(0, idx.shape), idx)[0]
-            yc = tmp.xy(np.repeat(0, idy.shape), idy)[0]
+            yc = tmp.xy(idy, np.repeat(0, idy.shape))[1]
 
         out_dir_multi = out_dir + "_multiband"
         if not os.path.exists(out_dir_multi):
