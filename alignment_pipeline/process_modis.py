@@ -165,15 +165,17 @@ def run_warp_to_3338(args, ncpus=5):
 def rescale_values(fn):
     with rasterio.open(fn) as rst:
         meta = rst.meta.copy()
-        meta.update(compress="lzw", dtype="float32", nodata=0)
+        meta.update(compress="lzw", dtype="float32")
         arr = rst.read(1)
 
     arr_out = np.copy(arr).astype(np.float32)
     ind = np.where(arr != meta["nodata"])
-
+    nind = np.where(arr == meta["nodata"])
     # scale it:
     if fn.endswith(("_01.tif", "_05.tif")):
         arr_out[ind] = arr[ind] * 0.02
+        arr_out[nind] = -9999
+        meta.update(nodata=-9999)
 
     elif fn.endswith(("_09.tif", "_10.tif")):
         arr_out[ind] = (arr[ind] * 0.0020) + 0.49
@@ -329,7 +331,7 @@ if __name__ == "__main__":
     if rescale:
         print("Rescaling values according to user guide", end="... ")
         tic = time.perf_counter()
-        files = glob.glob(os.path.join(warped_dir, "*.tif"))
+        files = glob.glob(os.path.join(warped_dir, "*01.tif"))
         rescaled = run_rescale_values(files, ncpus=ncpus)
         print("done,", round(time.perf_counter() - tic, 1), "s")
 

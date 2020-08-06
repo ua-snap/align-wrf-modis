@@ -13,9 +13,7 @@ from helpers import check_env
 
 def make_cutline(template_fp, temp_dir):
     shp_fp = os.path.join(temp_dir, "clip_modis.shp")
-    _ = subprocess.call(
-        ["gdaltindex", shp_fp, template_fp]
-    )
+    _ = subprocess.call(["gdaltindex", shp_fp, template_fp])
     return shp_fp
 
 
@@ -37,7 +35,7 @@ def open_raster(fn, band=1):
 
 
 def get_dates(fps):
-    jd_lst = [os.path.basename(fp).split("_")[1][1:] for fp in fps]
+    jd_lst = [os.path.basename(fp).split("_")[-2] for fp in fps]
     dt = [datetime.datetime.strptime(jd_str, "%Y%j") for jd_str in jd_lst]
     dt_arr = np.array(dt, dtype="datetime64")
     return dt_arr
@@ -76,10 +74,13 @@ if __name__ == "__main__":
     shp_fp = make_cutline(template_fp, temp_dir)
 
     for fp in modis_fps:
-        fn = os.path.basename(fp)
-        print("working on", fn[:16])
+        fn = os.path.basename(fp).split("_")
+        fn = "{}_{}_InteriorAK_{}_3338.tif".format(mod_var, fn[-6], fn[-5][1:])
+        print("working on", fn)
         out_fp = os.path.join(out_dir, fn)
-        clip_modis(shp_fp, fp, out_fp,)
+        clip_modis(
+            shp_fp, fp, out_fp,
+        )
 
     _ = os.unlink(shp_fp)
 
@@ -106,7 +107,7 @@ if __name__ == "__main__":
         # geotiff
         out_tif_fp = os.path.join(
             out_dir_multi,
-            "{}_{}_InteriorAK_006_3338_multiband.tif".format(sensor, mod_var),
+            "{}_{}_InteriorAK_3338_multiband.tif".format(mod_var, sensor),
         )
         with rio.open(out_tif_fp, "w", **new_meta,) as out:
             out.write(bands_arr)
@@ -121,6 +122,14 @@ if __name__ == "__main__":
             {mod_var: (["date", "yc", "xc"], bands_arr)},
             coords={"xc": xc, "yc": yc, "date": dates,},
         )
+        attrs = {
+            "title": "1km WRF-ailgned MODIS LST",
+            "creation_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "epsg": 3338,
+            "hdf_source": "{}.A2000049.h11v02.006.2015058135049.hdf".format(sensor),
+            "SNAP_version": "0.1.0",
+        }
+        ds.attrs = attrs
         out_nc_fp = out_tif_fp.replace(".tif", ".nc")
         ds.to_netcdf(out_nc_fp)
         print(out_tif_fp)
