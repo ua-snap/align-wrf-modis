@@ -56,19 +56,25 @@ Aligned data for MODIS and WRF will be saved in: `$OUTPUT_DIR/MODIS` and `$OUTPU
 
 ### 4.) Using the R scripts
 
-Currently, there is only one R script available:
+#### `plot_era_comparison.R`
 
-#### `plot_weekly_timeseries.R`
-
-For specified coordinates, plot the averaged weekly timeseries of averaged TSK and LST values on the aligned grid, and save as a PNG. This script can be run via the command line with the `Rscript` via `Rscript R_scripts/plot_weekly_timeseries.R <args>`. Help on these arguments can be displayed via `Rscript R_scripts/plot_wekly_timeseries.R --help`. 
+For specified coordinates (lat/lon), plot the averaged weekly timeseries of any **single** TSK source with MODIS LST values on the aligned grid for overlapping years, and save as a PNG. This script can be run via the command line with the `Rscript` via `Rscript R_scripts/plot_wrf_comparison.R <args>`. Help on these arguments can be displayed via `Rscript R_scripts/plot_era_comparison.R --help`. 
 
 An example usage of this, making use of all arguments, is:  
 
 ```
- Rscript R_scripts/plot_weekly_timeseries.R -t gfdl -a max -s MYD11A2 -x -147.72 -y 64.84 -o /path/to/file.png
+ Rscript R_scripts/plot_era_comparison.R -t gfdl -a max -s MYD11A2 -x -147.72 -y 64.84 -o /path/to/file.png
 ```
 
 This will create a plot using the WRF GFDL TSK values, resampled to the MODIS 8-day time periods using **maximum values** as the aggregate function, plotted against the LST values derived from the MYD11A2 sensor, all for the coordinates specified and saved to the output path.
+
+#### `plot_gcm_comparison.R`
+
+For specified coordinates (lat/lon), plot the averaged weekly timeseries of **both** GCM-based TSK data with MODIS LST values on the aligned grid for overlapping years, and save as a PNG. This script can be run via the command line with the `Rscript` via `Rscript R_scripts/plot_gcm_comparison.R <args>`. Help on these arguments can be displayed via `Rscript R_scripts/plot_gcom_comparison.R --help`. The main difference between this script and `plot_wrf_comparison.R` is that it removes the choice of TSK source, but plots both GCM TSK sources instead. As such, it has one less argument. Example:
+
+```
+ Rscript R_scripts/plot_weekly_timeseries.R -a max -s MOD11A2 -x -147.72 -y 64.84 -o /path/to/file.png
+```
 
 ## WRF data directory structure
 
