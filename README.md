@@ -2,11 +2,13 @@
 
 Align WRF-downscaled reanalysis (ERA-Interim) and GCM (GFDL-CM3, NCAR-CCSM4) data with MODIS LST data (MOD11A2) in time and space. Currently, only the WRF TSK variable is supported. 
 
-The processing of MODIS LST and 1km WRF TSK data developed for the SERDP Fish and Fire project is done via the `alignment_pipeline` directory. Legacy code for exploratory analysis and processing 20km WRF/MODIS alignment is currently retained. 
+The processing of MODIS LST and 1km WRF TSK data developed for the SERDP Fish and Fire project is done via the `alignment_pipeline` directory. This pipeline downloads and extracts the relevant 8-day aggregated MODIS LST data to the extent of the WRF domain in EPSG:3338, and downsamples the WRF to this grid. This downsampling occurs because although both products are "1km" resolution, the MODIS rasters in this area are less resolute than WRF when reprojected to EPSG:3338.
 
-## Running this code
+Legacy code for exploratory analysis and processing 20km WRF/MODIS alignment is currently retained. 
 
-#### 0.) software
+## Using this codebase
+
+### 0.) software
 
 This codebase is designed to be run with `pipenv`.
 
@@ -14,7 +16,7 @@ GDAL >= 2.0 is required. `pipenv` does not necessarily install the correct versi
 
 Follow instructions [here](http://www.pymodis.org/info.html#requirements) for enabling an Earthdata account to download MODIS data.
 
-#### 1.) env vars
+### 1.) env vars
 
 First, the paths to the necessary data need to be available in the following env vars.  
 
@@ -33,7 +35,7 @@ All of these must be set:
 
 *Note: currently, the 1km WRF TSK data is not available for download, and so the appropriate files must be retrieved manually and arranged in a particular directory structure - those requirements can be found at the end of this README.*
 
-#### 2.) MODIS download
+### 2.) MODIS download
 
 *Skip this step if MODIS data are present.* 
 
@@ -41,15 +43,30 @@ First, register with [NASA EARTHDATA.](https://urs.earthdata.nasa.gov/users/new)
 
 `pipenv run alignment_pipeline/download_modis -u <username> -p <password>.py `
 
-#### 3.) Run the pipeline
+### 3.) Running the alignment pipeline
 
 1. process the raw modis with flags for all steps: `pipenv run python alignment_pipeline/process_modis.py -cmwr`
 2. extract 8-day time periods used in aggregated (averaged) MODIS LST data: `pipenv run python alignment_pipeline/extract_modis_periods_metadata.py`
-3. temporally resample and aggregaten the WRF TSK to the MODIS time periods: `pipenv run python alignment_pipeline/resample_wrf_to_modis_periods.py`.  
+3. temporally resample and aggregate the WRF TSK to the MODIS time periods: `pipenv run python alignment_pipeline/resample_wrf_to_modis_periods.py`.  
 4. reproject the WRF TSK data to epsg:3338: `pipenv run python alignment_pipeline/reporoject_wrf.py`
-5. warp the MODIS LST data to the reprojected WRF domain: `pipenv run python alignment_pipeline/regrid_modis_to_wrf.py`
+5. clip the MODIS LST data to the reprojected WRF domain: `pipenv run python alignment_pipeline/clip_modis_to_wrf.py`
+6. regrid the WRF to the slightly lower resolution of the clipped MODIS data: `pipenv run python alignment_pipeline/regrid_wrf_to_modis.py`
 
 Aligned data for MODIS and WRF will be saved in: `$OUTPUT_DIR/MODIS` and `$OUTPUT_DIR/WRF`, repsectively. 
+
+### 4.) Using the R scripts
+
+#### `plot_weekly_timeseries.R`
+
+For specified coordinates, plot the averaged weekly timeseries of averaged TSK and LST values on the aligned grid, and save as a PNG. This script can be run via the command line with the `Rscript` via `Rscript R_scripts/plot_weekly_timeseries.R <args>`. Help on these arguments can be displayed via `Rscript R_scripts/plot_wekly_timeseries.R --help`. 
+
+An example usage of this, making use of all arguments, is:  
+
+```
+ Rscript R_scripts/plot_weekly_timeseries.R -t gfdl -a max -s MYD11A2 -x -147.72 -y 64.84 -o /path/to/file.png
+```
+
+This will create a plot using the WRF GFDL TSK values, resampled to the MODIS 8-day time periods using **maximum values** as the aggregate function, plotted against the LST values derived from the MYD11A2 sensor, all for the coordinates specified and saved to the output path.
 
 ## WRF data directory structure
 
