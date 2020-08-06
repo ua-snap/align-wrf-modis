@@ -9,6 +9,7 @@ import xarray as xr
 import os, glob, subprocess, itertools, datetime
 from helpers import check_env
 
+
 def warp_wrf(temp_arr, temp_meta, fp, out_fp):
     with rio.open(out_fp, "w", **temp_meta) as rst:
         rst.write(temp_arr)
@@ -17,7 +18,8 @@ def warp_wrf(temp_arr, temp_meta, fp, out_fp):
     )
     with rio.open(out_fp, mode="r+") as out:
         arr = out.read(1)
-        arr[arr == 0] = -9999
+        # values close to zero form from reasmpling
+        arr[np.isclose(arr, 0)] = -9999
         out.write(arr, 1)
 
 
@@ -48,9 +50,7 @@ if __name__ == "__main__":
     if not os.path.exists(out_dir):
         _ = os.makedirs(out_dir)
 
-    wrf_dir = os.path.join(
-        scratch_dir, "WRF", "{}_1km_3338".format(wrf_var)
-    )
+    wrf_dir = os.path.join(scratch_dir, "WRF", "{}_1km_3338".format(wrf_var))
 
     with rio.open(template_fp) as tmp:
         temp_arr = np.empty_like(tmp.read())
@@ -87,8 +87,7 @@ if __name__ == "__main__":
 
         # geotiff
         out_tif_fp = os.path.join(
-            out_multi_dir, 
-            "{}_{}_multiband.tif".format(wrf_var, directory),
+            out_multi_dir, "{}_{}_multiband.tif".format(wrf_var, directory),
         )
         with rio.open(out_tif_fp, "w", **new_meta,) as out:
             out.write(bands_arr)
@@ -103,6 +102,14 @@ if __name__ == "__main__":
             {wrf_var: (["date", "yc", "xc"], bands_arr)},
             coords={"xc": xc, "yc": yc, "date": dates,},
         )
+        attrs = {
+            "title": "1km MODIS-ailgned WRF TSK",
+            "creation_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "epsg": 3338,
+            "nc_source": "WRFDS_2000-02-21_serdp.nc",
+            "SNAP_version": "0.1.0",
+        }
+        ds.attrs = attrs
         out_nc_fp = out_tif_fp.replace(".tif", ".nc")
         ds.to_netcdf(out_nc_fp)
         print(out_tif_fp)
