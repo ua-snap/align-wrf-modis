@@ -56,6 +56,8 @@ Aligned data for MODIS and WRF will be saved in: `$OUTPUT_DIR/MODIS` and `$OUTPU
 
 ### 4.) Using the R scripts
 
+Currently, there is only one R script available:
+
 #### `plot_weekly_timeseries.R`
 
 For specified coordinates, plot the averaged weekly timeseries of averaged TSK and LST values on the aligned grid, and save as a PNG. This script can be run via the command line with the `Rscript` via `Rscript R_scripts/plot_weekly_timeseries.R <args>`. Help on these arguments can be displayed via `Rscript R_scripts/plot_wekly_timeseries.R --help`. 
