@@ -1,5 +1,4 @@
 # Plot weekly MODIS LST and WRF TSK for any single WRF source (gfdl, ccsm, era)
-# writes to $OUTPUT_DIR/plots as "woy_LST-TSK_<lat>-<lon>_<source>.png"
 
 suppressMessages({
   library(ncdf4)
