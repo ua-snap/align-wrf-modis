@@ -56,6 +56,8 @@ Aligned data for MODIS and WRF will be saved in: `$OUTPUT_DIR/MODIS` and `$OUTPU
 
 ### 4.) Using the R scripts
 
+These scripts rely on having the `$OUTPUT_DIR` environmental variable set for finding the data. This needs to be set to the path to the location of those output directories, `WRF/` and `MODIS/`.
+
 #### `plot_era_comparison.R`
 
 For specified coordinates (lat/lon), plot the averaged weekly timeseries of any **single** TSK source with MODIS LST values on the aligned grid for overlapping years, and save as a PNG. This script can be run via the command line with the `Rscript` via `Rscript R_scripts/plot_wrf_comparison.R <args>`. Help on these arguments can be displayed via `Rscript R_scripts/plot_era_comparison.R --help`. 
