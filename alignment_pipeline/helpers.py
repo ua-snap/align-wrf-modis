@@ -25,10 +25,12 @@ def check_env(wrf_env_var=True):
         if ("WRF_1KM_DIR" not in env_vars) & ("WRF_20KM_DIR" not in env_vars):
             return False
         elif "WRF_1KM_DIR" in env_vars:
-            wrf_env_var = "WRF_1KM_DIR"
+            return "WRF_1KM_DIR"
         else:
-            wrf_env_var = "WRF_20KM_DIR"
-
+            return "WRF_20KM_DIR"
+    else:
+        # return true if wrf_env var not set
+        return True
     # PLACEHOLDER: check that files in directory match expected WRF structure
     # wrf_dir = env_vars[wrf_env_var]
 
