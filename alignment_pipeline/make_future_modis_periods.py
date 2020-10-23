@@ -55,7 +55,7 @@ if __name__ == "__main__":
     scratch_dir = os.getenv("SCRATCH_DIR")
     ancillary_dir = os.path.join(scratch_dir, "ancillary")
     meta_fp = os.path.join(
-        ancillary_dir, "MODIS_LST_8dayComposite_begin_end_range_metadata_final.csv"
+        ancillary_dir, "historical_modis_range_metadata.csv"
     )
     df = pd.read_csv(meta_fp)
 
