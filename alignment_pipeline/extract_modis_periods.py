@@ -1,5 +1,6 @@
 """
-Extract the begin/end dates for the MODIS 8-day aggregate periods
+1) Extract the begin/end dates for the MODIS 8-day aggregate periods
+2) Determine the begin/end dates for future MODIS 8-day periods
 """
 
 import os, glob, time, argparse, datetime
@@ -30,13 +31,51 @@ def get_ranges(fp):
     return out
 
 
+def get_future_ranges(period):
+    """
+    Make data frame of future ranges for specified years. 
+    Note: this does not need to be based on historical period, because a 
+    new 8-day period is started on the first of every year. 
+    """
+    def make_dates(year):
+        """
+        Make starting dates for a given year.
+        Use end cutoff of 11/1. Using 10/31 as end date results in extra period
+        for leap years. This final period will always be only days from November
+        excep on leap years.
+        """
+        begin_dates = pd.date_range(f"{year}-01-01", f"{year}-11-01", freq="8D")
+        return begin_dates.values
+
+    years = np.arange(int(period[0]), int(period[1]) + 1)
+    begin_dates = np.array([make_dates(year) for year in years]).flatten()
+    begin_dates = pd.to_datetime(begin_dates)
+    end_dates = begin_dates + pd.Timedelta(days=7)
+    times_df = pd.DataFrame(
+        {
+            "RANGEBEGINNINGDATE": begin_dates.strftime("%Y-%m-%d"),
+            "RANGEBEGINNINGTIME": "00:00:00",
+            "RANGEENDINGDATE": end_dates.strftime("%Y-%m-%d"),
+            "RANGEENDINGTIME": "23:59:59",
+        },
+        # index=begin_range[:-1],
+        index=begin_dates
+    )
+
+    # find start day-of-year for subsetting to relevant
+    # time of year for models (growing season starts in April)
+    start_doy = datetime.date(2020, 3, 25).timetuple().tm_yday
+    return times_df.loc[(times_df.index.dayofyear >= start_doy)]
+
+
 if __name__ == "__main__":
+    # 1) extract historical ranges
     print("Extracting historical MODIS date ranges...")
     tic = time.perf_counter()
 
-    env_ok = check_env(wrf_env_var=False)
-    if not env_ok:
-        exit("Environment variables incorrectly setup, check README for requirements")
+    _ = check_env()
+    # if not env_ok:
+    #     exit("Environment variables incorrectly setup, check README for requirements")
     # args
     # parse args
     parser = argparse.ArgumentParser(
@@ -53,7 +92,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     ncpus = args.ncpus
 
-    base_dir = os.getenv("MODIS_DIR")
+    modis_dir = os.getenv("MODIS_DIR")
     scratch_dir = os.getenv("SCRATCH_DIR")
 #     files = sorted([
 #         os.path.join(r, fn)
@@ -66,7 +105,7 @@ if __name__ == "__main__":
     # determine ranges from MOD11A2 because we have determined 
     #  that MYD11A2 time ranges are a subset of MOD11A2
     files = sorted(
-        glob.glob(os.path.join(base_dir, "MOD11A2", "*h11*.hdf"))
+        glob.glob(os.path.join(modis_dir, "MOD11A2", "*h11*.hdf"))
     )
 
     # Setup output dir
@@ -86,7 +125,7 @@ if __name__ == "__main__":
     # find start and end days-of-year for subsetting to relevant
     #  time of year for models (growing season: April - October)
     start_doy = datetime.date(2020, 3, 25).timetuple().tm_yday
-    # finding yday of last day of October is done with
+    # finding yday of last day of October is done using
     #  leap year to ensure inclusion of all possible periods starting
     #  in October
     end_doy = datetime.date(2020, 10, 31).timetuple().tm_yday
@@ -97,7 +136,7 @@ if __name__ == "__main__":
     out_fp = os.path.join(ancillary_dir, "historical_modis_range_metadata.csv")
             # ancillary_dir, "MODIS_LST_8dayComposite_begin_end_range_metadata.csv"
     df.to_csv(out_fp, index=False)
-    print(f"Ranges saved to CSV, {round(time.perf_counter() - tic, 1)}s")
+    print(f"Historical ranges saved to CSV, {round(time.perf_counter() - tic, 1)}s")
     print(f"Output path: {out_fp}\n")
 
     # subset it since we have posited that they use the same dates in each tile agg
@@ -107,4 +146,14 @@ if __name__ == "__main__":
     #         ancillary_dir, "MODIS_LST_8dayComposite_begin_end_range_metadata_final.csv"
     #     )
     # )
+
+    # 2) create future ranges
+    # Future WRF periods are 2037-07-02 - 2047-12-31, and 2067-07-02 - 2077-12-31
+    future_periods = [("2037", "2047"), ("2067", "2077")]
+    temp_fp = os.path.join(ancillary_dir, "future_modis_range_metadata_{}-{}.csv")
+    for period in future_periods:
+        out_df = get_future_ranges(period)
+        out_fp = temp_fp.format(period[0], period[1])
+        out_df.to_csv(out_fp, index=False)
+        print(f"Future date ranges for {period[0]}-{period[1]} saved as {out_fp}")
 
