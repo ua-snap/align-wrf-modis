@@ -7,7 +7,7 @@ import pandas as pd
 import rasterio as rio
 import xarray as xr
 import os, glob, subprocess, itertools, datetime, time, argparse
-from helpers import check_env
+from helpers import check_env, parse_args
 
 
 def warp_wrf(temp_arr, temp_meta, fp, out_fp):
@@ -41,29 +41,30 @@ def get_dates(fps):
 if __name__ == "__main__":
 
     # check environment
-    wrf_env_var = check_env()
-    if not wrf_env_var:
-        exit("Environment variables incorrectly setup, check README for requirements")
+    _ = check_env()
+    # if not wrf_env_var:
+    #     exit("Environment variables incorrectly setup, check README for requirements")
 
-    # parse args
-    parser = argparse.ArgumentParser(
-        description="regrid the reprojected WRF to the same grid as reprojected MODIS"
-    )
-    parser.add_argument(
-        "-r",
-        "--year_range",
-        action="store",
-        dest="year_range",
-        help="WRF years to work on ('2000-2018', '2037-2047', or '2067-2077')",
-    )
+    # # parse args
+    # parser = argparse.ArgumentParser(
+    #     description="regrid the reprojected WRF to the same grid as reprojected MODIS"
+    # )
+    # parser.add_argument(
+    #     "-r",
+    #     "--year_range",
+    #     action="store",
+    #     dest="year_range",
+    #     help="WRF years to work on ('2000-2018', '2037-2047', or '2067-2077')",
+    # )
 
     # unpack the args here
-    args = parser.parse_args()
-    year_range = args.year_range
+    # args = parser.parse_args()
+    # year_range = args.year_range
+    year_range, model_groups = parse_args()
     # model_groups = ["gfdl", "ccsm"]
-    valid_ranges = ["2000-2018", "2037-2047", "2067-2077"]
-    if year_range not in valid_ranges:
-        exit("Invalid year range specified")
+    # valid_ranges = ["2000-2018", "2037-2047", "2067-2077"]
+    # if year_range not in valid_ranges:
+    #     exit("Invalid year range specified")
 
     wrf_var = "tsk"
     scratch_dir = os.getenv("SCRATCH_DIR")
@@ -76,7 +77,7 @@ if __name__ == "__main__":
 
     # wrf_dir = os.path.join(scratch_dir, "WRF", "{}_1km_3338".format(wrf_var))
     wrf_dir = os.path.join(scratch_dir, "WRF", f"{wrf_var}_1km_3338-slim")
-    if year_range == valid_ranges[0]:
+    if year_range == "2000-2018":
         # model_groups = ["era"] + model_groups
         wrf_dps = glob.glob(os.path.join(wrf_dir, f"*2007-2017"))
         wrf_dps += glob.glob(os.path.join(wrf_dir, f"*{year_range}"))
@@ -100,7 +101,7 @@ if __name__ == "__main__":
         wrf_fps = sorted(glob.glob(os.path.join(dp, "*.tif")))
         # set_dir = os.path.join(out_dir, directory)
         set_str = os.path.basename(dp)
-        set_dir = os.path.join(scratch_dir, f"{set_str}_regridded")
+        set_dir = os.path.join(scratch_dir, "WRF", "regridded", f"{set_str}_regridded")
         if not os.path.exists(set_dir):
             _ = os.makedirs(set_dir)
         bands_fps = []
@@ -128,7 +129,10 @@ if __name__ == "__main__":
         # out_tif_fp = os.path.join(
         #     out_multi_dir, "{}_{}_multiband.tif".format(wrf_var, directory),
         # )
-        out_nc_fp = os.path.join(out_dir, f"{wrf_var}_{set_str}.nc")
+        # out_nc_fp = os.path.join(out_dir, f"{wrf_var}_{set_str}.nc")
+        out_nc_fp = os.path.join(
+            scratch_dir, "WRF", "regridded", f"{wrf_var}_{set_str}.nc"
+        )
         # with rio.open(out_tif_fp, "w", **new_meta,) as out:
         #     out.write(bands_arr)
 

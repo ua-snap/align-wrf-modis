@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import rasterio as rio
 from rasterio.windows import Window
-from helpers import check_env, get_model_groups
+from helpers import check_env, parse_args
 from datetime import datetime
 
 
@@ -115,31 +115,30 @@ def open_raster(fn, band=1):
 
 if __name__ == "__main__":
     # check environment
-    wrf_env_var = check_env()
-    if not wrf_env_var:
-        exit("Environment variables incorrectly setup, check README for requirements")
+    _ = check_env()
 
     # parse args
-    parser = argparse.ArgumentParser(
-        description="reproject the 8-day WRF data to EPSG:3338"
-    )
-    parser.add_argument(
-        "-r",
-        "--year_range",
-        action="store",
-        dest="year_range",
-        help="WRF years to work on ('2000-2018', '2037-2047', or '2067-2077')",
-    )
-    # unpack the args here
-    args = parser.parse_args()
-    year_range = args.year_range
+    # parser = argparse.ArgumentParser(
+    #     description="reproject the 8-day WRF data to EPSG:3338"
+    # )
+    # parser.add_argument(
+    #     "-r",
+    #     "--year_range",
+    #     action="store",
+    #     dest="year_range",
+    #     help="WRF years to work on ('2000-2018', '2037-2047', or '2067-2077')",
+    # )
+    # # unpack the args here
+    # args = parser.parse_args()
+    # year_range = args.year_range
+    year_range, model_groups = parse_args()
     # check period, set model groups
-    model_groups = ["gfdl", "ccsm"]
-    valid_ranges = ["2000-2018", "2037-2047", "2067-2077"]
-    if year_range not in valid_ranges:
-        exit("Invalid year range specified")
-    elif year_range == "2000-2018":
-        model_groups = ["era"] + model_groups
+    # model_groups = ["gfdl", "ccsm"]
+    # valid_ranges = ["2000-2018", "2037-2047", "2067-2077"]
+    # if year_range not in valid_ranges:
+    #     exit("Invalid year range specified")
+    # if year_range == "2000-2018":
+    #     model_groups = ["era"] + model_groups
 
     # setup dirs
     variable = "tsk"

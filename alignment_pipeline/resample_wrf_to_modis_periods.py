@@ -12,7 +12,7 @@ import datetime
 from multiprocessing import Pool
 import subprocess
 import time
-from helpers import check_env, get_model_groups
+from helpers import check_env, parse_args
 
 
 def get_files(wrf_dir, group, begin_year, end_year):
@@ -261,9 +261,9 @@ def run(x):
 if __name__ == "__main__":
     # check environment
     wrf_env_var = check_env()
-    if not wrf_env_var:
-        exit("Environment variables incorrectly setup, check README for requirements")
-    print("env ok, wrf_env_var:", wrf_env_var)
+    # if not wrf_env_var:
+    #     exit("Environment variables incorrectly setup, check README for requirements")
+    # print("env ok, wrf_env_var:", wrf_env_var)
 
     # parse args
     parser = argparse.ArgumentParser(
@@ -288,38 +288,41 @@ if __name__ == "__main__":
     # unpack args, validate, and set up vars
     # could probably be moved to helpers
     args = parser.parse_args()
-    year_range = args.year_range
-    model_groups = args.model_groups
-    if model_groups != None:
-        model_groups = model_groups.split("-")
-    else:
-        model_groups = [""]
-    valid_ranges = ["2000-2018", "2037-2047", "2067-2077"]
-    if year_range not in valid_ranges:
-        exit("Invalid year range specified")
-    else:
-        years = year_range.split("-")
-        begin_year, end_year = int(years[0]), int(years[1])
+    year_range, model_groups = parse_args(args)
+    begin_year, end_year = int(year_range[:4]), int(year_range[5:])
 
-    valid_groups = ["gfdl", "ccsm", "era"]
-    group_check = [group in valid_groups for group in model_groups]
-    all_groups = None
-    if model_groups[0] == "":
-        all_groups = True
-        model_groups = ["gfdl", "ccsm"]
-    elif any(group_check) == False:
-        exit("Invalid model group(s) specified")
-    elif ("era" in model_groups) & (year_range != valid_ranges[0]):
-        exit("'era' model group only allowed in '2000-2018' range")
+    # year_range = args.year_range
+    # model_groups = args.model_groups
 
-    if year_range == valid_ranges[0]:
+    # if model_groups != None:
+    #     model_groups = model_groups.split("-")
+    # else:
+    #     model_groups = [""]
+    # valid_ranges = ["2000-2018", "2037-2047", "2067-2077"]
+    # if year_range not in valid_ranges:
+    #     exit("Invalid year range specified")
+    # else:
+    #     years = year_range.split("-")
+    #     begin_year, end_year = int(years[0]), int(years[1])
+
+    # valid_groups = ["gfdl", "ccsm", "era"]
+    # group_check = [group in valid_groups for group in model_groups]
+    # all_groups = None
+    # if model_groups[0] == "":
+    #     all_groups = True
+    #     model_groups = ["gfdl", "ccsm"]
+    # elif any(group_check) == False:
+    #     exit("Invalid model group(s) specified")
+    # elif ("era" in model_groups) & (year_range != valid_ranges[0]):
+    #     exit("'era' model group only allowed in '2000-2018' range")
+
+    if year_range == "2000-2018":
         meta_fn = "historical_modis_range_metadata.csv"
-        if all_groups:
-            model_groups = ["era"] + model_groups
     else:
         meta_fn = f"future_modis_range_metadata_{begin_year}-{end_year}.csv"
 
-    wrf_dir = os.getenv(wrf_env_var)
+    # wrf_dir = os.getenv(wrf_env_var)
+    wrf_dir = os.getenv("WRF_DIR")
     variable = "tsk"
     scratch_dir = os.getenv("SCRATCH_DIR")
     temp_dir = os.path.join(scratch_dir, "temp")
@@ -426,4 +429,5 @@ if __name__ == "__main__":
         print(
             group, "modisified,", round(time.perf_counter() - tic1, 1), "s",
         )
+
 
