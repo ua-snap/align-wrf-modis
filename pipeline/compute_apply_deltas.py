@@ -98,7 +98,7 @@ if __name__ == "__main__":
                 # filter out beginning periods of
                 bias_ds = ds.where(ds.date >= np.datetime64(cut_str), drop=True)
             adj_ds = bias_ds.copy()
-            adj_ds.tsk.values = bias_ds.tsk.values + deltas_da.values
+            adj_ds.tsk.values = bias_ds.tsk.values - deltas_da.values
             adj_fp = out_fp.format(gcm, year_range.replace("7-", "8-"))
             adj_ds.to_netcdf(adj_fp)
             print(
