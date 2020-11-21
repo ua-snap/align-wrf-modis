@@ -6,16 +6,15 @@ Perform the following with MODIS MOD11A2/MYD11A2 data:
   - rescales the projected data to correct values in Kelvin
 """
 
-import argparse
-import subprocess, glob, os, shutil
+import argparse, glob, os, shutil, subprocess, time
 import pandas as pd
 import numpy as np
-import rasterio
-import multiprocessing as mp
-import time
+import rasterio as rio
+from multiprocessing import Pool
 
 
 def extract_bands(fn):
+    """extract bands of M*D11A2 .hdf to GeoTIFF"""
     print(fn)
     # translate to GTiff
     return subprocess.call(
@@ -34,10 +33,11 @@ def extract_bands(fn):
 
 
 def run_all_extract_bands(files, output_dir, ncpus=16):
+    """Extract all M*D11A2 bands in parallel"""
     # change the directory
     os.chdir(output_dir)
     # parallel it
-    pool = mp.Pool(ncpus)
+    pool = Pool(ncpus)
     out = pool.map(extract_bands, files)
     pool.close()
     pool.join()
@@ -45,11 +45,13 @@ def run_all_extract_bands(files, output_dir, ncpus=16):
 
 
 def move_file(x):
+    """Move a file, used for keeping desired MOD/MYD11A2 bands"""
     fn, out_fn = x
     return shutil.move(fn, out_fn)
 
 
 def move_desired_bands(in_dir, out_dir, keep_bands=["01", "03"], ncpus=14):
+    """Move desired M*D11A2 bands"""
     # list and filter the files based on the desired bands
     files = glob.glob(os.path.join(in_dir, "*.tif"))
     files = [
@@ -59,7 +61,7 @@ def move_desired_bands(in_dir, out_dir, keep_bands=["01", "03"], ncpus=14):
     ]
     out_files = [os.path.join(out_dir, os.path.basename(fn)) for fn in files]
     # move the files to a new dir
-    pool = mp.Pool(ncpus)
+    pool = Pool(ncpus)
     moved = pool.map(move_file, list(zip(files, out_files)))
     pool.close()
     pool.join()
@@ -67,9 +69,10 @@ def move_desired_bands(in_dir, out_dir, keep_bands=["01", "03"], ncpus=14):
 
 
 def move_undesired_bands(in_dir, out_dir, ncpus=16):
+    """Move undesired MO*D11A2 bands"""
     files = glob.glob(os.path.join(temp_dir, "*.tif"))
     out_files = [os.path.join(out_dir, os.path.basename(fn)) for fn in files]
-    pool = mp.Pool(ncpus)
+    pool = Pool(ncpus)
     out = pool.map(move_file, list(zip(files, out_files)))
     pool.close()
     pool.join()
@@ -96,7 +99,6 @@ def make_band_lookup():
 
 def make_mosaic_args(files, out_dir):
     """make arguments to pass to mosaic"""
-
     # make a dataframe that we can group and use in arguments creation for the mosaicking
     colnames = ["product", "date", "tile", "version", "production", "band"]
     df = pd.DataFrame(
@@ -122,27 +124,29 @@ def make_mosaic_args(files, out_dir):
 
 
 def mosaic_tiles(files, out_fn):
+    """Use gdal_merge.py to mosaic the specified tiles"""
     command = ["gdal_merge.py", "-n", "0", "-a_nodata", "0", "-o", out_fn,] + files
     _ = subprocess.call(command)
     return out_fn
 
 
 def wrap_mosaic_tiles(x):
-    """a wrapper for the mosaic f(x) for parallelism"""
+    """A wrapper for the mosaic f(x) for parallelism"""
     files, out_fn = x
     return mosaic_tiles(files, out_fn)
 
 
 def run_mosaic_tiles(args, ncpus=5):
-    pool = mp.Pool(ncpus)
+    """Run mosaicing in parallel"""
+    pool = Pool(ncpus)
     out = pool.map(wrap_mosaic_tiles, args)
     pool.close()
     pool.join()
     return out
-    # out = [wrap_mosaic_tiles(arg) for arg in args]
 
 
 def warp_to_3338(fn, out_fn):
+    """gdalwarp a file to epsg:3338"""
     return subprocess.call(
         [
             "gdalwarp",
@@ -159,11 +163,13 @@ def warp_to_3338(fn, out_fn):
 
 
 def wrap_warp_to_3338(x):
+    """Wrapper for running gdalwarp in parallel""" 
     return warp_to_3338(*x)
 
 
 def run_warp_to_3338(args, ncpus=5):
-    pool = mp.Pool(ncpus)
+    """Run the warping in parallel"""
+    pool = Pool(ncpus)
     out = pool.map(wrap_warp_to_3338, args)
     pool.close()
     pool.join()
@@ -171,38 +177,27 @@ def run_warp_to_3338(args, ncpus=5):
 
 
 def rescale_values(fn):
-    with rasterio.open(fn) as rst:
+    """Rescale the values according to the user guide"""
+    with rio.open(fn) as rst:
         meta = rst.meta.copy()
         meta.update(compress="lzw", dtype="float32")
         arr = rst.read(1)
-
     arr_out = np.copy(arr).astype(np.float32)
     ind = np.where(arr != meta["nodata"])
     nind = np.where(arr == meta["nodata"])
-    # scale it:
-    if fn.endswith(("_01.tif", "_05.tif")):
-        arr_out[ind] = arr[ind] * 0.02
-        arr_out[nind] = -9999
-        meta.update(nodata=-9999)
-
-    elif fn.endswith(("_09.tif", "_10.tif")):
-        arr_out[ind] = (arr[ind] * 0.0020) + 0.49
-
-    elif fn.endswith("_03.tif"):
-        arr_out[ind] = arr[ind] * 0.1
-
-    else:
-        raise BaseException("wrong bands")
-
+    arr_out[ind] = arr[ind] * 0.02
+    arr_out[nind] = -9999
+    meta.update(nodata=-9999)
     # make the output filename and dump to disk
-    out_fn = fn.replace("warped", "rescaled")
-    with rasterio.open(out_fn, "w", **meta) as out:
+    out_fn = fn.replace("warped", "processed")
+    with rio.open(out_fn, "w", **meta) as out:
         out.write(arr_out.astype(np.float32), 1)
     return out_fn
 
 
 def run_rescale_values(files, ncpus):
-    pool = mp.Pool(ncpus)
+    """Run the rescaling in parallel, producing "processed" files"""
+    pool = Pool(ncpus)
     out = pool.map(rescale_values, files)
     pool.close()
     pool.join()
