@@ -6,6 +6,14 @@ Perform the following with MODIS MOD11A2/MYD11A2 data:
   - rescales the projected data to correct values in Kelvin
 """
 
+import argparse
+import subprocess, glob, os, shutil
+import pandas as pd
+import numpy as np
+import rasterio
+import multiprocessing as mp
+import time
+
 
 def extract_bands(fn):
     print(fn)
@@ -42,7 +50,6 @@ def move_file(x):
 
 
 def move_desired_bands(in_dir, out_dir, keep_bands=["01", "03"], ncpus=14):
-
     # list and filter the files based on the desired bands
     files = glob.glob(os.path.join(in_dir, "*.tif"))
     files = [
@@ -127,11 +134,12 @@ def wrap_mosaic_tiles(x):
 
 
 def run_mosaic_tiles(args, ncpus=5):
-    # pool = mp.Pool(ncpus)
-    # out = pool.map(wrap_mosaic_tiles, args)
-    # pool.close()
-    # pool.join()
-    out = [wrap_mosaic_tiles(arg) for arg in args]
+    pool = mp.Pool(ncpus)
+    out = pool.map(wrap_mosaic_tiles, args)
+    pool.close()
+    pool.join()
+    return out
+    # out = [wrap_mosaic_tiles(arg) for arg in args]
 
 
 def warp_to_3338(fn, out_fn):
@@ -202,14 +210,6 @@ def run_rescale_values(files, ncpus):
 
 
 if __name__ == "__main__":
-    import argparse
-    import subprocess, glob, os, shutil
-    import pandas as pd
-    import numpy as np
-    import rasterio
-    import multiprocessing as mp
-    import time
-
     # parse args
     parser = argparse.ArgumentParser(
         description="run various processing tasks on MODIS data"
@@ -242,6 +242,8 @@ if __name__ == "__main__":
     warp = args.warp
     rescale = args.rescale
     ncpus = args.ncpus
+    if ncpus == None:
+        ncpus = 4
 
     # LIST THE DATA
     base_dir = os.getenv("MODIS_DIR")
@@ -279,7 +281,7 @@ if __name__ == "__main__":
         _ = os.makedirs(warped_dir)
 
     # make a directory to store the final rescaled outputs
-    rescaled_dir = os.path.join(scratch_dir, "MODIS", "rescaled")
+    rescaled_dir = os.path.join(scratch_dir, "MODIS", "processed")
     if not os.path.exists(rescaled_dir):
         _ = os.makedirs(rescaled_dir)
 
