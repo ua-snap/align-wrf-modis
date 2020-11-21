@@ -1,4 +1,4 @@
-"""Reproject the resampled WRF to epsg:3338"""
+"""Re-project WRF (warp and downsample) to match clipped MODIS"""
 
 import argparse, glob, os, subprocess, time
 import numpy as np
@@ -8,105 +8,50 @@ import xarray as xr
 from datetime import datetime
 from helpers import check_env
 from multiprocessing import Pool
-from rasterio.windows import Window
 
 
-def get_output_filepaths(ds, wrf_fp, out_dir):
+def make_bands_fps(wrf_fp, wrf_var, group, bands_dir):
     """Make output filepaths for saving warped data"""
     times_fp = wrf_fp.replace(".nc", "_times.csv")
-    times = pd.read_csv(times_fp)
-    times = pd.to_datetime(times.time)
-    jdates = list(times.map(lambda x: x.strftime("%Y%j")))
-    out_fps = [
-        os.path.join(
-            out_dir,
-            "{}_8Day_daytime_wrf_{}_max_{}.tif".format(
-                variable, group, jdate
-            ),
-        )
-        for jdate in jdates
+    dates = pd.read_csv(times_fp).time.values
+    bands_fps = [
+        os.path.join(bands_dir, f"{wrf_var}_max_{group}_{date}_resampled.tif")
+        for date in dates
     ]
-    return out_fps
+    return bands_fps
 
 
-def concat_bands(ds, variable):
-    """Concatenate separate bands produced from warping"""
-    arr = []
-    varnames = list(ds.variables.keys())
-    # 3 non-band variabls
-    for i in np.arange(len(varnames) - 3):
-        arr.append(ds.variables[varnames[i]].values)
-    arr = np.flip(np.array(arr), axis=1)
-    arr[arr == 0] = -9999
-    ds_new = xr.Dataset(
-        {variable: (["time", "yc", "xc"], arr)},
-        coords={
-            "xc": ("xc", ds["lon"].values),
-            "yc": ("yc", np.flip(ds["lat"].values)),
-            "time": np.arange(len(varnames) - 3),
-        },
-    )
-    return ds_new
-
-
-def get_metadata(ds, wrf_fp, variable):
-    """Make metadata using resampled WRF"""
-    rows, cols = ds[variable].shape[1:]
-    with rio.open("netcdf:{}:Band1".format(wrf_fp)) as src:
-        transform = src.transform
-        crs = src.crs
-    meta = {
-        "count": 1,
-        "crs": crs,
-        "driver": "GTiff",
-        "dtype": "float32",
-        "height": rows,
-        "nodata": -9999,
-        "transform": transform,
-        "width": cols,
-    }
-    return meta
-
-
-def make_gtiff(arr, meta, out_fp):
-    """make GeoTIFF band arr to gdalwarp"""
-    shape = arr.shape
-    if len(shape) == 2:
-        count = 1
-        arr = arr[np.newaxis, ...]
-    else:
-        count = shape[0]
-    meta.update(count=count)
-    with rio.open(out_fp, "w", **meta) as out:
-        out.write(arr)
-    return out_fp
-
-
-def reproject_wrf_to_3338(fp, out_fp):
-    """gdalwarp to epsg:3338"""
-    _ = subprocess.call(
-        ["gdalwarp", "-t_srs", "epsg:3338", "-q", "-overwrite", fp, out_fp]
-    )
-    # open array clipped to bounds and write
-    with rio.open(out_fp, mode="r+") as out:
-        arr = out.read(1)
-        arr[arr == 0] = -9999
-        out.write(arr, 1)
-    return out_fp
-
-
-def run_reproject(arr, meta, out_fp):
-    """run the reprojection for a band"""
-    fp = make_gtiff(arr, meta, out_fp)
-    out_fp = fp.replace(".tif", "_3338.tif")
-    _ = reproject_wrf_to_3338(fp, out_fp)
-    os.unlink(fp)
+def reproject_wrf(band_arr, fp, temp_meta, band_meta, temp_arr):
+    """Warp WRF to prepped MODIS grid raster with gdalwarp"""
+    # modify meta for band GeoTIFF, write
+    band_arr[band_arr == 0] = -9999
+    with rio.open(fp, "w", **band_meta) as src:
+        src.write(band_arr, 1)
+    # write blank template array to GeoTIFF
+    out_fp = fp.replace("resampled", "reprojected")
+    with rio.open(out_fp, "w", **temp_meta) as src:
+        src.write(temp_arr)
+    _ = subprocess.call(["gdalwarp", "-s_srs", "epsg:4326", "-q", fp, out_fp])
     return out_fp
 
 
 def wrap_reproject(args):
-    """Wrapper for reprojecting in parallel"""
-    return run_reproject(*args)
+    """Wrapper for warping in parallel"""
+    return reproject_wrf(*args)
+
+
+def read_band(fn, band=1):
+    """Read a GeoTIFF band's data, for reprojected WRF"""
+    with rio.open(fn) as src:
+        return src.read(band).copy()
+
+
+def get_dates(fps):
+    """Get datetime array of dates from filenames, for NetCDFs"""
+    dates = [os.path.basename(fp).split("_")[-2] for fp in fps]
+    dt = [datetime.strptime(date, "%Y-%m-%d") for date in dates]
+    dt_arr = np.array(dt, dtype="datetime64")
+    return dt_arr
 
 
 if __name__ == "__main__":
@@ -125,41 +70,76 @@ if __name__ == "__main__":
     args = parser.parse_args()
     ncpus = args.ncpus
     # setup dirs
-    variable = "tsk"
+    wrf_var = "tsk"
+    mod_var = "lst"
     scratch_dir = os.getenv("SCRATCH_DIR")
-    out_dir = os.path.join(scratch_dir, "WRF", "reprojected", variable)
-    wrf_dir = os.path.join(scratch_dir, "WRF", "resampled", variable)
-    periods = [(2007, 2017), (2037, 2047), (2067, 2077)]
-    groups = ["era", "gfdl", "ccsm"] 
-    periods = [periods[i] for i in [0,0,0,1,1,2,2]]
-    groups = [groups[i] for i in [0,1,2,1,2,1,2]]
-    for period, group in zip(periods, groups):
-        if (period[0] == 2007) & (group == "era"):
-            period = (2000, 2018)
+    modis_dir = os.path.join(scratch_dir, "MODIS", "clipped", mod_var)
+    res_dir = os.path.join(scratch_dir, "WRF", "resampled", wrf_var)
+    out_dir = os.path.join(scratch_dir, "WRF", "reprojected", wrf_var)
+    if not os.path.exists(out_dir):
+        _ = os.makedirs(out_dir)
+    out_nc_dir = os.path.join(out_dir, "netcdf")
+    if not os.path.exists(out_nc_dir):
+        _ = os.makedirs(out_nc_dir)
+    template_fp = glob.glob(os.path.join(modis_dir, "*/*"))[0]
+    # get clipped MODIS metadata
+    with rio.open(template_fp) as src:
+        temp_meta = src.meta
+        temp_arr = np.empty_like(src.read())
+    res_fps = sorted(glob.glob(os.path.join(res_dir, "*.nc")))
+    # get metadata for the WRF bands
+    with rio.open(f"netcdf:{res_fps[0]}:Band1") as src:
+        band_meta = src.meta
+    band_meta.update({"driver": "GTiff", "nodata": -9999})
+    for fp in res_fps:
+        # set up file paths
+        fn_meta = os.path.basename(fp).split("_")
+        period = fn_meta[-1].split(".")[0]
+        group = fn_meta[-2]
         print(f"Working on {group}, {period}", end="...")
         tic = time.perf_counter()
-        set_dir = os.path.join(out_dir, f"{group}_{period[0]}-{period[1]}")
-        if not os.path.exists(set_dir):
-            _ = os.makedirs(set_dir)
-        # open modisified data
-        wrf_fp = glob.glob(
-            os.path.join(wrf_dir, f"*{group}_{period[0]}-{period[1]}.nc")
-        )[0]
-        ds = xr.open_dataset(wrf_fp)
-        # concatenate bands from multiband GeoTIFF
-        ds = concat_bands(ds, variable)
-        # get metadata
-        meta = get_metadata(ds, wrf_fp, variable)
-        # get output file paths
-        out_fps = get_output_filepaths(ds, wrf_fp, set_dir)
-        # make args
-        da = ds[variable]
-        # process in parallel
-        args = [(a, meta, out_fp) for a, out_fp in zip(list(da.values), out_fps)]
+        # for writing the intermediate bands in current projection
+        bands_dir = os.path.join(res_dir, "bands", f"{group}_{period}")
+        if not os.path.exists(bands_dir):
+            _ = os.makedirs(bands_dir)
+        bands_fps = make_bands_fps(fp, wrf_var, group, bands_dir)
+        # for writing reprojected bands
+        out_bands_dir = os.path.join(out_dir, "bands", f"{group}_{period}")
+        if not os.path.exists(out_bands_dir):
+            _ = os.makedirs(out_bands_dir)
+        # combine bands with fps and meta
+        with xr.open_dataset(fp) as ds:
+            args = [
+                (ds[band].values, fp, temp_meta, band_meta, temp_arr)
+                for band, fp in zip(ds.variables, bands_fps)
+            ]
+        # run reprojection
         pool = Pool(ncpus)
-        out = pool.map(wrap_reproject, args)
+        out_bands_fps = pool.map(wrap_reproject, args)
         pool.close()
         pool.join()
+
+        # assemble files into NetCDF
+        print("Making NetCDF", end="...")
+        pool = Pool(ncpus)
+        bands = pool.map(read_band, out_bands_fps)
+        pool.close()
+        pool.join()
+        bands_arr = np.array(bands)
+        with rio.open(out_bands_fps[0]) as src:
+            idx = np.arange(src.width)
+            idy = np.arange(src.height)
+            xc = src.xy(np.repeat(0, idx.shape), idx)[0]
+            yc = src.xy(idy, np.repeat(0, idy.shape))[1]
+        dates = get_dates(out_bands_fps)
+        ds = xr.Dataset(
+            {wrf_var: (["date", "yc", "xc"], bands_arr)},
+            coords={"xc": xc, "yc": yc, "date": dates,},
+        )
+        out_nc_fp = os.path.join(
+            out_nc_dir, f"{wrf_var}_max_{group}_{period}_reprojected.nc"
+        )
+        ds.to_netcdf(out_nc_fp)
         duration = round(time.perf_counter() - tic, 1)
         print(f"done, duration: {duration}s")
-        print(f"Reprojected files saved to {set_dir}")
+        print(f"Data saved to {out_nc_fp}")

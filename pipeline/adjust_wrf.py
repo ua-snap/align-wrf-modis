@@ -1,5 +1,6 @@
 """Compute and apply deltas for future WRF"""
-# saves climatologies and deltas to SCRATCH_DIR
+# saves climatologies and deltas to $SCRATCH_DIR
+# saves adjusted WRF to $OUTPUT_DIR
 
 import itertools, os
 import numpy as np
@@ -34,7 +35,7 @@ if __name__ == "__main__":
     scratch_dir = os.getenv("SCRATCH_DIR")
     output_dir = os.getenv("OUTPUT_DIR")
     wrf_var = "tsk"
-    wrf_dir = os.path.join(scratch_dir, "WRF", "regridded", wrf_var, "netcdf")
+    wrf_dir = os.path.join(scratch_dir, "WRF", "reprojected", wrf_var, "netcdf")
     deltas_dir = os.path.join(scratch_dir, "WRF", "deltas", wrf_var)
     if not os.path.exists(deltas_dir):
         _ = os.makedirs(deltas_dir)
@@ -57,7 +58,7 @@ if __name__ == "__main__":
     # read ERA data and compute climatology.
     #   Subset to 2008-2017, to match GCM period.
     era_fp = os.path.join(
-        wrf_dir, wrf_fn.format(wrf_var, "era", "2000-2018", "regridded")
+        wrf_dir, wrf_fn.format(wrf_var, "era", "2000-2018", "reprojected")
     )
     # first, add metadata and save
     era_out_fp = os.path.join(
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     wrf_period = "2008-2017"
     for gcm in gcms:
         # compute and save climatologies and deltas for GCM
-        wrf_hist_fp = wrf_fp.format(wrf_var, gcm, "2007-2017", "regridded")
+        wrf_hist_fp = wrf_fp.format(wrf_var, gcm, "2007-2017", "reprojected")
         with xr.open_dataset(wrf_hist_fp) as ds:
             bias_ds = ds.where(ds.date >= np.datetime64("2008-03-29"), drop=True)
         bias_clim_da = compute_clim(bias_ds)
@@ -124,7 +125,7 @@ if __name__ == "__main__":
             if year_range == year_ranges[1]:
                 cut_str = "2068-03-29"
             with xr.open_dataset(
-                wrf_fp.format(wrf_var, gcm, year_range, "regridded")
+                wrf_fp.format(wrf_var, gcm, year_range, "reprojected")
             ) as ds:
                 # read WRF and filter out beginning period
                 bias_ds = ds.where(ds.date >= np.datetime64(cut_str), drop=True)

@@ -85,8 +85,7 @@ if __name__ == "__main__":
     out_dir = os.path.join(out_base_dir, "MODIS", "aligned", mod_var)
     if not os.path.exists(out_dir):
         _ = os.makedirs(out_dir)
-    wrf_dir = os.path.join(scratch_dir, "WRF", "reprojected", wrf_var, "era_2000-2018")
-    template_fp = os.path.join(wrf_dir, os.listdir(wrf_dir)[0])
+    template_fp = os.path.join(scratch_dir, "ancillary", "wrf_3338_template.tif")
     # make cutline fp
     shp_fp = make_cutline(template_fp, temp_dir)
     # stuff for metadata
@@ -106,9 +105,12 @@ if __name__ == "__main__":
         clip_args = []
         for fp in modis_fps:
             fn = os.path.basename(fp).split("_")
-            fn = f"{mod_var}_{sensor}_InteriorAK_{fn[-5][1:]}_clipped.tif"
-            out_fp = os.path.join(out_bands_dir, fn)
-            clip_args.append((shp_fp, fp, out_fp))
+            jdate = fn[-5][1:]
+            # only need dates in Mar-Oct
+            if (int(jdate[-3:]) >= 89) & (int(jdate[-3:]) <= 305):
+                fn = f"{mod_var}_{sensor}_InteriorAK_{jdate}_clipped.tif"
+                out_fp = os.path.join(out_bands_dir, fn)
+                clip_args.append((shp_fp, fp, out_fp))
         pool = Pool(ncpus)
         bands_fps = pool.map(wrap_clip, clip_args)
         pool.close()
