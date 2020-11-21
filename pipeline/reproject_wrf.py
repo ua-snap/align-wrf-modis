@@ -1,18 +1,18 @@
-"""
-Reproject the resampled 1km WRF TSK to epsg:3338
-"""
+"""Reproject the resampled WRF to epsg:3338"""
 
-import os, glob, subprocess, argparse, itertools, copy
-import xarray as xr
+import argparse, glob, os, subprocess, time
 import numpy as np
 import pandas as pd
 import rasterio as rio
-from rasterio.windows import Window
-from helpers import check_env, parse_args
+import xarray as xr
 from datetime import datetime
+from helpers import check_env
+from multiprocessing import Pool
+from rasterio.windows import Window
 
 
 def get_output_filepaths(ds, wrf_fp, out_dir):
+    """Make output filepaths for saving warped data"""
     times_fp = wrf_fp.replace(".nc", "_times.csv")
     times = pd.read_csv(times_fp)
     times = pd.to_datetime(times.time)
@@ -30,7 +30,7 @@ def get_output_filepaths(ds, wrf_fp, out_dir):
 
 
 def concat_bands(ds, variable):
-    # concatenate separate bands from warping 1km WRF
+    """Concatenate separate bands produced from warping"""
     arr = []
     varnames = list(ds.variables.keys())
     # 3 non-band variabls
@@ -50,10 +50,11 @@ def concat_bands(ds, variable):
 
 
 def get_metadata(ds, wrf_fp, variable):
+    """Make metadata using resampled WRF"""
     rows, cols = ds[variable].shape[1:]
-    src = rio.open("netcdf:{}:Band1".format(wrf_fp))
-    transform = src.transform
-    crs = src.crs
+    with rio.open("netcdf:{}:Band1".format(wrf_fp)) as src:
+        transform = src.transform
+        crs = src.crs
     meta = {
         "count": 1,
         "crs": crs,
@@ -68,6 +69,7 @@ def get_metadata(ds, wrf_fp, variable):
 
 
 def make_gtiff(arr, meta, out_fp):
+    """make GeoTIFF band arr to gdalwarp"""
     shape = arr.shape
     if len(shape) == 2:
         count = 1
@@ -81,8 +83,7 @@ def make_gtiff(arr, meta, out_fp):
 
 
 def reproject_wrf_to_3338(fp, out_fp):
-
-    print(out_fp)
+    """gdalwarp to epsg:3338"""
     _ = subprocess.call(
         ["gdalwarp", "-t_srs", "epsg:3338", "-q", "-overwrite", fp, out_fp]
     )
@@ -95,86 +96,54 @@ def reproject_wrf_to_3338(fp, out_fp):
 
 
 def run_reproject(arr, meta, out_fp):
+    """run the reprojection for a band"""
     fp = make_gtiff(arr, meta, out_fp)
-    out_fp = copy.copy(fp).replace(".tif", "_3338.tif")
+    out_fp = fp.replace(".tif", "_3338.tif")
     _ = reproject_wrf_to_3338(fp, out_fp)
     os.unlink(fp)
     return out_fp
 
 
-def wrapper(x):
-    return run_reproject(*x)
-
-
-def open_raster(fn, band=1):
-    with rio.open(fn) as rst:
-        arr = rst.read(band).copy()
-    rst = None
-    return arr
+def wrap_reproject(args):
+    """Wrapper for reprojecting in parallel"""
+    return run_reproject(*args)
 
 
 if __name__ == "__main__":
-    # check environment
     _ = check_env()
-
-    # parse args
-    # parser = argparse.ArgumentParser(
-    #     description="reproject the 8-day WRF data to EPSG:3338"
-    # )
-    # parser.add_argument(
-    #     "-r",
-    #     "--year_range",
-    #     action="store",
-    #     dest="year_range",
-    #     help="WRF years to work on ('2000-2018', '2037-2047', or '2067-2077')",
-    # )
-    # # unpack the args here
-    # args = parser.parse_args()
-    # year_range = args.year_range
-    year_range, model_groups = parse_args()
-    # check period, set model groups
-    # model_groups = ["gfdl", "ccsm"]
-    # valid_ranges = ["2000-2018", "2037-2047", "2067-2077"]
-    # if year_range not in valid_ranges:
-    #     exit("Invalid year range specified")
-    # if year_range == "2000-2018":
-    #     model_groups = ["era"] + model_groups
-
+    parser = argparse.ArgumentParser(
+        description="Extract the date ranges of historical 8-day MODIS data"
+    )
+    parser.add_argument(
+        "-n",
+        "--ncpus",
+        action="store",
+        dest="ncpus",
+        type=int,
+        help="Number of cores to use with multiprocessing",
+    )
+    args = parser.parse_args()
+    ncpus = args.ncpus
     # setup dirs
     variable = "tsk"
     scratch_dir = os.getenv("SCRATCH_DIR")
-    out_dir = os.path.join(
-        # os.getenv("OUTPUT_DIR"), "WRF", "{}_1km_3338".format(variable)
-        scratch_dir,
-        "WRF",
-        "{}_1km_3338-slim".format(variable),
-    )
-    # wrf_dir = os.path.join(scratch_dir, "WRF", "WRF_day_hours", variable)
-    wrf_dir = os.path.join(scratch_dir, "WRF", "WRF_day_hours-slim", variable)
-    # groups = get_model_groups(wrf_env_var)
-    # sensors = ["MOD11A2", "MYD11A2"]
-    # metrics = ["mean", "min", "max"]
-
-    
-    # for group, sensor, metric in itertools.product(groups, sensors, metrics):
-    for group in model_groups:
-        # print("working on", group, sensor, metric)
-        print("Working on", group)
-
-        # use subdir for each set of GeoTIFFs
-        # set_dir = os.path.join(out_dir, "{}_{}_{}".format(group, metric, sensor))
-        if (group in ["ccsm", "gfdl"]) & (year_range == "2000-2018"):
-            begin_year, end_year = "2007", "2017"
-        else:
-            years = year_range.split("-")
-            begin_year, end_year = years[0], years[1]
-
-        set_dir = os.path.join(out_dir, f"{group}_max_{begin_year}-{end_year}")
+    out_dir = os.path.join(scratch_dir, "WRF", "reprojected", variable)
+    wrf_dir = os.path.join(scratch_dir, "WRF", "resampled", variable)
+    periods = [(2007, 2017), (2037, 2047), (2067, 2077)]
+    groups = ["era", "gfdl", "ccsm"] 
+    periods = [periods[i] for i in [0,0,0,1,1,2,2]]
+    groups = [groups[i] for i in [0,1,2,1,2,1,2]]
+    for period, group in zip(periods, groups):
+        if (period[0] == 2007) & (group == "era"):
+            period = (2000, 2018)
+        print(f"Working on {group}, {period}", end="...")
+        tic = time.perf_counter()
+        set_dir = os.path.join(out_dir, f"{group}_{period[0]}-{period[1]}")
         if not os.path.exists(set_dir):
             _ = os.makedirs(set_dir)
         # open modisified data
         wrf_fp = glob.glob(
-            os.path.join(wrf_dir, f"*{group}_{begin_year}-{end_year}.nc")
+            os.path.join(wrf_dir, f"*{group}_{period[0]}-{period[1]}.nc")
         )[0]
         ds = xr.open_dataset(wrf_fp)
         # concatenate bands from multiband GeoTIFF
@@ -185,7 +154,12 @@ if __name__ == "__main__":
         out_fps = get_output_filepaths(ds, wrf_fp, set_dir)
         # make args
         da = ds[variable]
+        # process in parallel
         args = [(a, meta, out_fp) for a, out_fp in zip(list(da.values), out_fps)]
-        # serial processing
-        out = [wrapper(x) for x in args]
-
+        pool = Pool(ncpus)
+        out = pool.map(wrap_reproject, args)
+        pool.close()
+        pool.join()
+        duration = round(time.perf_counter() - tic, 1)
+        print(f"done, duration: {duration}s")
+        print(f"Reprojected files saved to {set_dir}")
