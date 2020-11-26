@@ -12,6 +12,8 @@ from multiprocessing import Pool
 def make_cutline(template_fp, temp_dir):
     """Make shapefile outline of WRF grid"""
     shp_fp = os.path.join(temp_dir, "clip_modis.shp")
+    if os.path.exists(shp_fp):
+        os.unlink(shp_fp)
     _ = subprocess.call(["gdaltindex", shp_fp, template_fp])
     return shp_fp
 
@@ -137,7 +139,7 @@ if __name__ == "__main__":
         dates = get_dates(bands_fps)
         epoch = np.datetime64("2000-01-01")
         ds = xr.Dataset(
-            {mod_var: (["date", "y", "x"], bands_arr)},
+            {mod_var: (["date", "yc", "xc"], bands_arr)},
             coords={"xc": xc, "yc": yc, "date": convert_date(dates, epoch),},
         )
         ds = add_metadata(ds, mod_var, long_name, title, src_str.format(sensor), epoch)
