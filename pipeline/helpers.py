@@ -2,6 +2,7 @@
 
 import datetime, os
 import numpy as np
+from pyproj import CRS
 
 
 def check_env():
@@ -18,7 +19,7 @@ def check_env():
 
 def convert_date(dt_arr, epoch):
     """Convert datetime64 array to days (integer) since epoch"""
-    return (dt_arr - epoch).astype("timedelta64[D]").astype("int")
+    return (dt_arr - epoch).astype("timedelta64[D]").astype(np.int32)
 
 
 def add_metadata(ds, var, var_name, title, source, epoch):
@@ -45,11 +46,9 @@ def add_metadata(ds, var, var_name, title, source, epoch):
     }
 
     # spatial attributes
-    ds["crs"] = int()
-    ds["crs"].attrs = {
-        "grid_mapping_name": "albers_conical_equal_area",
-        "crs_wkt": 'PROJCS["NAD83 / Alaska Albers",GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101,AUTHORITY["EPSG","7019"]],TOWGS84[0,0,0,0,0,0,0],AUTHORITY["EPSG","6269"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4269"]],PROJECTION["Albers_Conic_Equal_Area"],PARAMETER["standard_parallel_1",55],PARAMETER["standard_parallel_2",65],PARAMETER["latitude_of_center",50],PARAMETER["longitude_of_center",-154],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["X",EAST],AXIS["Y",NORTH],AUTHORITY["EPSG","3338"]]',
-    }
+    crs = CRS.from_epsg(3338)
+    ds["crs"] = np.int16()
+    ds["crs"].attrs = crs.to_cf()
 
     # variable attributes
     ds[var].attrs = {
