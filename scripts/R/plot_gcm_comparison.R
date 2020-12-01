@@ -77,7 +77,6 @@ plot_aggr_woy <- function(tsk1_fp,
                           tsk2_fp,
                           lst_fp, 
                           lonlat, 
-                          aggr_type, 
                           sensor) {
   # prep data for plot
   tsk1_df <- extr_cell(tsk1_fp, "tsk", "TSK-GFDL", lonlat)
@@ -96,10 +95,10 @@ plot_aggr_woy <- function(tsk1_fp,
     ylab("Temperature (°C)") + xlab("Week of Year") + 
     ggtitle(
       paste0(
-        "MODIS LST, WRF TSK GCM comparison for ", lat, "N, ", lon, "E"
+        "MODIS LST, WRF TSK (max) GCM comparison for ", lat, "N, ", lon, "E"
       ),
       subtitle = paste0(
-        sensor, ", ", aggr_type, ", ", yrs[1], "-", yrs[2]
+        sensor, ", ", yrs[1], "-", yrs[2]
       )
     ) +
     theme_classic() + 
@@ -112,23 +111,14 @@ plot_aggr_woy <- function(tsk1_fp,
 
 #-- Main ----------------------------------------------------------------------
 # setup
-out_dir = Sys.getenv("OUTPUT_DIR")
-wrf_dir <- file.path(out_dir, "WRF")
-modis_dir <- file.path(out_dir, "MODIS")
+out_dir = file.path(Sys.getenv("OUTPUT_DIR"), "aligned-WRF-MODIS")
+tsk_dir <- file.path(out_dir, "WRF")
+lst_dir <- file.path(out_dir, "MODIS")
 
-tsk_dir <- file.path(wrf_dir, "tsk_1km_3338_multiband")
-lst_dir <- file.path(modis_dir, "lst_1km_3338_multiband")
-
-aggr_type <- NULL
 out_fp <- NULL
 
 # setup command line arguments
 option_list = list(
-  make_option(
-    c("-a", "--aggr-type"), type = "character", default = "max",
-    help = "WRF temporal aggregate method (accepts one of: min, mean, or max)", 
-    metavar = "character"
-  ),
   make_option(
     c("-s", "--sensor"), type = "character", default = "MOD11A2",
     help = "Sensor type (accepts one of: MOD11A2, MYD11A2)", 
@@ -144,16 +134,13 @@ option_list = list(
   ),
   make_option(
     c("-o", "--out-file"), type = "character", default = "", 
-    help ="output filepath (default: $OUTPUT_DIR/plots/compare_modis_lst_<sensor>_wrf_gcms_tsk_<aggr-type>_<lat>N<lon>W.png)", 
+    help ="output filepath (default: $OUTPUT_DIR/plots/compare_modis_lst_<sensor>_wrf_gcms_tsk_max_<lat>N<lon>W.png)", 
     metavar = "character"
   )
 )
 
 # parse args and check
 opt = parse_args(OptionParser(option_list=option_list))
-if (!(opt$`aggr-type` %in% c("min", "mean", "max"))) {
-  stop("Invalid argument for --aggr-type")
-} else {aggr_type <- opt$`aggr-type`}
 
 sensor <- opt$sensor
 lon <- opt$lon
@@ -164,7 +151,7 @@ if (opt$`out-file` == "") {
   out_fp <- file.path(
     out_dir, "plots", paste0(
       "compare_modis_lst_", 
-      sensor, "_wrf_gcms_tsk_", aggr_type, "_", 
+      sensor, "_wrf_gcms_tsk_max_", 
       lat, "N", abs(lon), "W.png"
     )
   )
@@ -172,21 +159,17 @@ if (opt$`out-file` == "") {
 
 # source WRF files
 gfdl_fp <- file.path(
-  tsk_dir, paste0(
-    "tsk_gfdl_", aggr_type, "_", sensor, "_multiband.nc"
-  )
+  tsk_dir, "tsk_max_gfdl_2008-2017_aligned.nc"
 )
 ccsm_fp <- file.path(
-  tsk_dir, paste0(
-    "tsk_ccsm_", aggr_type, "_", sensor, "_multiband.nc"
-  )
+  tsk_dir, "tsk_max_ccsm_2008-2017_aligned.nc"
 )
 lst_fp <- file.path(
-  lst_dir, paste0("lst_", sensor, "_InteriorAK_3338_multiband.nc")
+  lst_dir, paste0("lst_", sensor, "_aligned.nc")
 )
 
 # create plot
-p <- plot_aggr_woy(gfdl_fp, ccsm_fp, lst_fp, c(lon, lat), aggr_type, sensor)
+p <- plot_aggr_woy(gfdl_fp, ccsm_fp, lst_fp, c(lon, lat), sensor)
 
 # write
 dir.create(dirname(out_fp), showWarnings = FALSE)

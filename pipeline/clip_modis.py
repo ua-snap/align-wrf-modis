@@ -157,7 +157,7 @@ if __name__ == "__main__":
             coords={"xc": xc, "yc": yc, "date": dates,},
         )
         ds = add_metadata(ds, mod_var, long_name, title, src_str.format(sensor))
-        out_nc_fp = os.path.join(out_dir, f"{sensor}_aligned.nc")
+        out_nc_fp = os.path.join(out_dir, f"lst_{sensor}_aligned.nc")
         ds.to_netcdf(out_nc_fp)
         duration = round(time.perf_counter() - tic, 1)
         print(f"done, duration: {duration}s")
