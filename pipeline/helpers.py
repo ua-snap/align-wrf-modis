@@ -17,12 +17,7 @@ def check_env():
     return True
 
 
-def convert_date(dt_arr, epoch):
-    """Convert datetime64 array to days (integer) since epoch"""
-    return (dt_arr - epoch).astype("timedelta64[D]").astype(np.int32)
-
-
-def add_metadata(ds, var, var_name, title, source, epoch):
+def add_metadata(ds, var, var_name, title, source):
     """Add metadata adhering to CF convention standards"""
 
     def cs_attrs(c):
@@ -60,6 +55,5 @@ def add_metadata(ds, var, var_name, title, source, epoch):
     ds.yc.attrs = cs_attrs("y")
     ds.date.attrs = {
         "long_name": "modis_period_start_date",
-        "units": f"days since {str(epoch)[:10]}"
     }
     return ds
