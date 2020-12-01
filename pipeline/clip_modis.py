@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import rasterio as rio
 import xarray as xr
-from helpers import check_env, add_metadata, convert_date
+from helpers import check_env, add_metadata
 from multiprocessing import Pool
 
 
@@ -150,14 +150,13 @@ if __name__ == "__main__":
             
         # write to netcdf
         dates = get_dates(bands_fps)
-        epoch = np.datetime64("2000-01-01")
         # Fill missing data with NaN (default _FillValue)
         bands_arr[bands_arr == 0] = np.nan
         ds = xr.Dataset(
             {mod_var: (["date", "yc", "xc"], bands_arr)},
-            coords={"xc": xc, "yc": yc, "date": convert_date(dates, epoch),},
+            coords={"xc": xc, "yc": yc, "date": dates,},
         )
-        ds = add_metadata(ds, mod_var, long_name, title, src_str.format(sensor), epoch)
+        ds = add_metadata(ds, mod_var, long_name, title, src_str.format(sensor))
         out_nc_fp = os.path.join(out_dir, f"{sensor}_aligned.nc")
         ds.to_netcdf(out_nc_fp)
         duration = round(time.perf_counter() - tic, 1)

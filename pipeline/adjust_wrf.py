@@ -6,7 +6,7 @@ import itertools, os
 import numpy as np
 import pandas as pd
 import xarray as xr
-from helpers import check_env, add_metadata, convert_date
+from helpers import check_env, add_metadata
 
 
 def get_modis_period(np_dt):
@@ -66,7 +66,6 @@ if __name__ == "__main__":
     era_out_fp = os.path.join(
         out_dir, wrf_fn.format(wrf_var, "era", "2000-2018", "aligned")
     )
-    epoch = np.datetime64("2000-01-01")
     with xr.open_dataset(era_fp) as ds:
         # ds for clim, susbet
         era_ds = ds.where(
@@ -74,9 +73,8 @@ if __name__ == "__main__":
             & (ds.date <= np.datetime64("2017-11-01")),
             drop=True,
         )
-    era_out_ds = ds.assign(date=lambda x: convert_date(ds.date.values, epoch))
     era_out_ds = add_metadata(
-        era_out_ds, wrf_var, long_name, title, src_str.format("ERA-Interim"), epoch
+        era_ds, wrf_var, long_name, title, src_str.format("ERA-Interim")
     )
     era_out_ds.to_netcdf(era_out_fp)
     print(f"Adjusted ERA data saved to {era_out_fp}")
@@ -120,11 +118,10 @@ if __name__ == "__main__":
         # apply deltas to historical GCM dataset
         adj_ds = bias_ds.copy()
         adj_ds[wrf_var].values = bias_ds[wrf_var].values - deltas_da.values
-        adj_ds = adj_ds.assign(date=lambda x: convert_date(adj_ds.date.values, epoch))
         # Set missing data to NaN (default NetCDF _FillValue)
         adj_ds[wrf_var].values[adj_ds[wrf_var].values == -9999] = np.nan
         adj_ds = add_metadata(
-            adj_ds, wrf_var, long_name, title, src_str.format(gcm_lu[gcm]), epoch
+            adj_ds, wrf_var, long_name, title, src_str.format(gcm_lu[gcm])
         )
         adj_fp = out_fp.format(wrf_var, gcm, wrf_period, "aligned")
         adj_ds.to_netcdf(adj_fp)
@@ -144,10 +141,9 @@ if __name__ == "__main__":
                 bias_ds = ds.where(ds.date >= np.datetime64(cut_str), drop=True)
             adj_ds = bias_ds.copy()
             adj_ds[wrf_var].values = bias_ds[wrf_var].values - deltas_da.values
-            adj_ds = adj_ds.assign(date=lambda x: convert_date(adj_ds.date.values, epoch))
             adj_ds[wrf_var].values[adj_ds[wrf_var].values == -9999] = np.nan
             adj_ds = add_metadata(
-                adj_ds, wrf_var, long_name, title, src_str.format(gcm_lu[gcm]), epoch
+                adj_ds, wrf_var, long_name, title, src_str.format(gcm_lu[gcm])
             )
             adj_fp = out_fp.format(
                 wrf_var, gcm, year_range.replace("7-", "8-"), "aligned"
