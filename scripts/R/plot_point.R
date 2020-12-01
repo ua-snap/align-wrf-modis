@@ -1,4 +1,4 @@
-# Plot weekly MODIS LST and WRF TSK for any single WRF source (gfdl, ccsm, era)
+# Plot weekly MODIS LST and/or WRF TSK for any source
 
 suppressMessages({
   library(ncdf4)
@@ -7,6 +7,15 @@ suppressMessages({
   library(optparse)
   library(sf)
 })
+
+
+make_args <- function(fn, nc_dir, ncvar, source) {
+  args <- list(
+    fp = file.path(nc_dir, fn),
+    ncvar = ncvar,
+    source = source
+  )
+}
 
 
 convert_lonlat <- function(nc, ncvar, lonlat) {
@@ -25,14 +34,17 @@ convert_lonlat <- function(nc, ncvar, lonlat) {
 
 # function to extract data with date based on row,col
 # default cell
-extr_cell <- function(fp, ncvar, src, lonlat) {
-  nc <- nc_open(fp)
+extr_cell <- function(args, lonlat) {
+  nc <- nc_open(args$fp)
+  ncvar <- args$ncvar
   rc <- convert_lonlat(nc, ncvar, lonlat)
+  # helper function to query data from NetCDF
   varr <- ncvar_get(nc, ncvar, c(rc[1], rc[2], 1), c(1,1,-1))
-  varr[varr == -9999] <- NA
+  if (all(is.nan(varr))) stop("ERROR: No data present for one or more sources")
   # convert to C
   varr <- varr - 273.15
   dates <- ncvar_get(nc, "date")
+  # accessing the NetCDF without helper functions
   date_units <- nc$var[[ncvar]]$dim[[3]]$units
   origin <- strsplit(date_units, " ")[[1]][3]
   dates <- as.Date(dates, origin = origin)
@@ -41,24 +53,25 @@ extr_cell <- function(fp, ncvar, src, lonlat) {
   data.frame(
     date = dates, 
     value = varr, 
-    source = src,
+    source = args$source,
     stringsAsFactors = FALSE
-  )
+  ) %>%
+    mutate(year = format(date, "%Y"))
 }
 
 
 # function to summarise extracted data as avg, min, max by week of year
-aggr_woy <- function(tsk1_df, tsk2_df, lst_df) {
-  # ensure use of only years present for both TSK and LST
-  tsk1_df <- mutate(tsk1_df, year = format(date, "%Y"))
-  tsk2_df <- mutate(tsk2_df, year = format(date, "%Y"))
-  lst_df <- mutate(lst_df, year = format(date, "%Y"))
-  keep_yrs <- intersect(tsk1_df$year, lst_df$year)
-  df <- rbind(tsk1_df, tsk2_df, lst_df) %>%
+# aggr_woy <- function(tsk1_df, tsk2_df, lst_df) {
+aggr_woy <- function(df_list) {
+  # ensure use of only years present for both all data
+  yr_list <- lapply(df_list, function(df) df$year)
+  sources <- unlist(lapply(df_list, function(df) unique(df$source)))                
+  keep_yrs <- Reduce(intersect, yr_list)                         
+  df <- do.call("rbind", df_list) %>%
     filter(year %in% keep_yrs) %>%
     mutate(
       week = as.factor(format(date, "%V")),
-      source = factor(source, levels = c("LST", "TSK-GFDL", "TSK-CCSM"))
+      source = factor(source, levels = sources)
     ) %>%
     group_by(week, source) %>%
     summarise(
@@ -73,32 +86,26 @@ aggr_woy <- function(tsk1_df, tsk2_df, lst_df) {
 
 
 # plot lst and tsk aggregate timeseries
-plot_aggr_woy <- function(tsk1_fp,
-                          tsk2_fp,
-                          lst_fp, 
-                          lonlat, 
-                          sensor) {
-  # prep data for plot
-  tsk1_df <- extr_cell(tsk1_fp, "tsk", "TSK-GFDL", lonlat)
-  tsk2_df <- extr_cell(tsk2_fp, "tsk", "TSK-CCSM", lonlat)
-  lst_df <- extr_cell(lst_fp, "lst", "LST", lonlat)
-  aggr <- aggr_woy(tsk1_df, tsk2_df, lst_df)
+plot_aggr_woy <- function(extr_args, lonlat) {
+  aggr <- lapply(extr_args, extr_cell, lonlat) %>%
+    aggr_woy()
   df <- aggr[[1]]
   yrs <- aggr[[2]]
   # make plot
+  cmap <- c("#FF0000", "#00A08A", "#F2AD00", "#5BBCD6", "#F98400")
   p <- ggplot(df, aes(x = week, y = mean, group = source)) + 
     geom_line(aes(color = source), size = 1) + 
     geom_ribbon(aes(ymin=min, ymax=max, fill = source), alpha=0.2) + 
-    scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07")) +
-    scale_fill_manual(values = c("#00AFBB", "#E7B800", "#FC4E07")) + 
+    scale_color_manual(values = cmap) +
+    scale_fill_manual(values = cmap) + 
     scale_x_discrete(breaks = c("01", "10", "20", "30", "40", "50")) + 
     ylab("Temperature (°C)") + xlab("Week of Year") + 
     ggtitle(
       paste0(
-        "MODIS LST, WRF TSK (max) GCM comparison for ", lat, "N, ", lon, "E"
+        "Aggregated temperature at ", lat, "N, ", lon, "E"
       ),
       subtitle = paste0(
-        sensor, ", ", yrs[1], "-", yrs[2]
+        "Aligned WRF(max) / MODIS(mean) data, ", yrs[1], "-", yrs[2]
       )
     ) +
     theme_classic() + 
@@ -111,18 +118,31 @@ plot_aggr_woy <- function(tsk1_fp,
 
 #-- Main ----------------------------------------------------------------------
 # setup
-out_dir = file.path(Sys.getenv("OUTPUT_DIR"), "aligned-WRF-MODIS")
-tsk_dir <- file.path(out_dir, "WRF")
-lst_dir <- file.path(out_dir, "MODIS")
-
-out_fp <- NULL
+out_dir = file.path(Sys.getenv("OUTPUT_DIR"))
+tsk_dir <- file.path(out_dir, "aligned-WRF-MODIS", "WRF")
+lst_dir <- file.path(out_dir, "aligned-WRF-MODIS", "MODIS")
 
 # setup command line arguments
 option_list = list(
   make_option(
-    c("-s", "--sensor"), type = "character", default = "MOD11A2",
-    help = "Sensor type (accepts one of: MOD11A2, MYD11A2)", 
-    metavar = "character"
+    c("-e", "--era"), action = "store_true", default = FALSE,
+    help = "Include ERA-Interim in plot"
+  ),
+  make_option(
+    c("-c", "--ccsm"), action = "store_true", default = FALSE,
+    help = "Include CCSM4 in plot"
+  ),
+  make_option(
+    c("-g", "--gfdl"), action = "store_true", default = FALSE,
+    help = "Include GFDL CM3 in plot"
+  ),
+  make_option(
+    c("-t", "--mod"), action = "store_true", default = FALSE,
+    help = "Include MOD11A2 in plot"
+  ),
+  make_option(
+    c("-a", "--myd"), action = "store_true", default = FALSE,
+    help = "Include MYD11A2 in plot"
   ),
   make_option(
     c("-x", "--lon"), type = "double", default = -147.72, 
@@ -134,15 +154,13 @@ option_list = list(
   ),
   make_option(
     c("-o", "--out-file"), type = "character", default = "", 
-    help ="output filepath (default: $OUTPUT_DIR/plots/compare_modis_lst_<sensor>_wrf_gcms_tsk_max_<lat>N<lon>W.png)", 
+    help ="output filepath (default: $OUTPUT_DIR/plots/aligned_data_comparison_<lat>N<lon>W.png)", 
     metavar = "character"
   )
 )
 
 # parse args and check
-opt = parse_args(OptionParser(option_list=option_list))
-
-sensor <- opt$sensor
+opt = parse_args(OptionParser(option_list=option_list))   
 lon <- opt$lon
 lat <- opt$lat
 # stop if neither out file or $OUTPUT_DIR are set, otherwise set it
@@ -150,26 +168,47 @@ if (opt$`out-file` == "") {
   if (out_dir == "") stop("$OUTPUT_DIR must be set if --out-file not used")
   out_fp <- file.path(
     out_dir, "plots", paste0(
-      "compare_modis_lst_", 
-      sensor, "_wrf_gcms_tsk_max_", 
+      "aligned_data_comparison_", 
       lat, "N", abs(lon), "W.png"
     )
   )
 } else {out_fp <- opt$`out-file`}
 
-# source WRF files
-gfdl_fp <- file.path(
-  tsk_dir, "tsk_max_gfdl_2008-2017_aligned.nc"
-)
-ccsm_fp <- file.path(
-  tsk_dir, "tsk_max_ccsm_2008-2017_aligned.nc"
-)
-lst_fp <- file.path(
-  lst_dir, paste0("lst_", sensor, "_aligned.nc")
-)
-
+# source WRF files with args for later 
+nc_args = list()
+if (opt$gfdl) {
+  nc_args[["gfdl"]] <- make_args(
+      "tsk_max_gfdl_2008-2017_aligned.nc",
+      tsk_dir, "tsk", "GFDL-TSK"
+  )
+}
+if (opt$ccsm) {
+  nc_args[["ccsm"]] <- make_args(
+      "tsk_max_ccsm_2008-2017_aligned.nc",
+      tsk_dir, "tsk", "CCSM4-TSK"
+  )
+}
+if (opt$era) {
+  nc_args[["era"]] <- make_args(
+      "tsk_max_era_2000-2018_aligned.nc",
+      tsk_dir, "tsk", "ERA-TSK"
+  )
+}
+if (opt$mod) {
+  nc_args[["mod"]] <- make_args(
+      "lst_MOD11A2_aligned.nc",
+      lst_dir, "lst", "MOD-LST"
+  )
+}
+if (opt$myd) {
+  nc_args[["myd"]] <- make_args(
+      "lst_MYD11A2_aligned.nc",
+      lst_dir, "lst", "MYD-LST"
+  )
+}
+    
 # create plot
-p <- plot_aggr_woy(gfdl_fp, ccsm_fp, lst_fp, c(lon, lat), sensor)
+p <- plot_aggr_woy(nc_args, c(lon, lat))
 
 # write
 dir.create(dirname(out_fp), showWarnings = FALSE)
@@ -177,4 +216,3 @@ ggsave(out_fp, p, "png", height=5)
 cat(out_fp, "\n")
 
 #------------------------------------------------------------------------------
-
