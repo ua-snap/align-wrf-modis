@@ -151,7 +151,7 @@ if __name__ == "__main__":
         # write to netcdf
         dates = get_dates(bands_fps)
         # Fill missing data with NaN (default _FillValue)
-        bands_arr[bands_arr == 0] = np.nan
+        bands_arr[bands_arr == -9999] = np.nan
         ds = xr.Dataset(
             {mod_var: (["date", "yc", "xc"], bands_arr)},
             coords={"xc": xc, "yc": yc, "date": dates,},
