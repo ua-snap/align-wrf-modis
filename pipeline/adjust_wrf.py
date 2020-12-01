@@ -68,18 +68,18 @@ if __name__ == "__main__":
     )
     with xr.open_dataset(era_fp) as ds:
         # ds for clim, susbet
-        era_ds = ds.where(
-            (ds.date >= np.datetime64("2008-03-29"))
-            & (ds.date <= np.datetime64("2017-11-01")),
-            drop=True,
+        era_out_ds = add_metadata(
+            ds, wrf_var, long_name, title, src_str.format("ERA-Interim")
         )
-    era_out_ds = add_metadata(
-        era_ds, wrf_var, long_name, title, src_str.format("ERA-Interim")
-    )
     era_out_ds.to_netcdf(era_out_fp)
     print(f"Adjusted ERA data saved to {era_out_fp}")
     
     # then, subset and compute climatology
+    era_ds = era_out_ds.where(
+        (era_out_ds.date >= np.datetime64("2008-03-29"))
+        & (era_out_ds.date <= np.datetime64("2017-11-01")),
+        drop=True,
+    )
     era_clim_da = compute_clim(era_ds)
     era_clim_fp = clim_fp.format(wrf_var, "era", "2008-2017", "climatology")
     era_clim_da.to_netcdf(era_clim_fp)
@@ -119,7 +119,7 @@ if __name__ == "__main__":
         adj_ds = bias_ds.copy()
         adj_ds[wrf_var].values = bias_ds[wrf_var].values - deltas_da.values
         # Set missing data to NaN (default NetCDF _FillValue)
-        adj_ds[wrf_var].values[adj_ds[wrf_var].values == -9999] = np.nan
+        adj_ds[wrf_var].values[adj_ds[wrf_var].values == 0] = np.nan
         adj_ds = add_metadata(
             adj_ds, wrf_var, long_name, title, src_str.format(gcm_lu[gcm])
         )
