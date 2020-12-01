@@ -42,7 +42,7 @@ if __name__ == "__main__":
     clim_dir = os.path.join(scratch_dir, "WRF", "climatologies", wrf_var)
     if not os.path.exists(clim_dir):
         _ = os.makedirs(clim_dir)
-    out_dir = os.path.join(output_dir, "WRF", "aligned", wrf_var)
+    out_dir = os.path.join(output_dir, "aligned-WRF-MODIS", "WRF")
     if not os.path.exists(out_dir):
         _ = os.makedirs(out_dir)
     wrf_fn = "{}_max_{}_{}_{}.nc"
@@ -50,11 +50,13 @@ if __name__ == "__main__":
     deltas_fp = os.path.join(deltas_dir, wrf_fn)
     clim_fp = os.path.join(clim_dir, wrf_fn)
     out_fp = os.path.join(out_dir, wrf_fn)
+    
     # stuff for metadata
     gcm_lu = {"gfdl": "GFDL-CM3", "ccsm": "NCAR-CCSM4"}
     src_str = "{} downscaled via WRF 4.0"
     title = "1km MODIS-aligned WRF TSK"
     long_name = "Surface skin temperature"
+    
     # read ERA data and compute climatology.
     #   Subset to 2008-2017, to match GCM period.
     era_fp = os.path.join(
@@ -78,11 +80,14 @@ if __name__ == "__main__":
     )
     era_out_ds.to_netcdf(era_out_fp)
     print(f"Adjusted ERA data saved to {era_out_fp}")
+    
     # then, subset and compute climatology
     era_clim_da = compute_clim(era_ds)
     era_clim_fp = clim_fp.format(wrf_var, "era", "2008-2017", "climatology")
     era_clim_da.to_netcdf(era_clim_fp)
     print(f"era climatology saved to {era_clim_fp}")
+    
+    # iterate delta adjustment over gcms
     gcms = ["gfdl", "ccsm"]
     year_ranges = ["2037-2047", "2067-2077"]
     wrf_period = "2008-2017"
@@ -95,11 +100,13 @@ if __name__ == "__main__":
         bias_clim_fp = clim_fp.format(wrf_var, gcm, wrf_period, "climatology")
         bias_clim_da.to_netcdf(bias_clim_fp)
         print(f"Climatology for {gcm}, {wrf_period} saved to {bias_clim_fp}")
+        
         # compute deltas, save
         deltas_da = bias_clim_da - era_clim_da
         gcm_deltas_fp = deltas_fp.format(wrf_var, gcm, wrf_period, "deltas")
         deltas_da.to_netcdf(gcm_deltas_fp)
-        print(f"Deltas for {gcm}, {wrf_period} saved to {gcm_deltas_fp}")
+        print(f"Deltas for {gcm}, {wrf_period} saved to {gcm_deltas_fp}")\
+        
         # tile deltas to match shape (modis periods) of aligned unadjusted data,
         #   make new deltas data array
         deltas_arr = np.tile(deltas_da, (10, 1, 1))
@@ -109,18 +116,24 @@ if __name__ == "__main__":
             coords=[modis_period, deltas_da.yc.values, deltas_da.xc.values],
             dims=["modis_period", "yc", "xc"],
         )
-        # apply deltas to historical dataset
+        
+        # apply deltas to historical GCM dataset
         adj_ds = bias_ds.copy()
         adj_ds[wrf_var].values = bias_ds[wrf_var].values - deltas_da.values
         adj_ds = adj_ds.assign(date=lambda x: convert_date(adj_ds.date.values, epoch))
+        # Set missing data to NaN (default NetCDF _FillValue)
+        adj_ds[wrf_var].values[adj_ds[wrf_var].values == -9999] = np.nan
         adj_ds = add_metadata(
             adj_ds, wrf_var, long_name, title, src_str.format(gcm_lu[gcm]), epoch
         )
         adj_fp = out_fp.format(wrf_var, gcm, wrf_period, "aligned")
         adj_ds.to_netcdf(adj_fp)
         print(f"Adjusted {gcm} data for {wrf_period} saved to {adj_fp}")
+        
+        # apply deltas to each future GCM dataset,
+        #   indexed by year range
         for year_range in year_ranges:
-            # apply deltas to aligned WRF data
+            # for later filtering of unused WRF data
             cut_str = "2038-03-30"
             if year_range == year_ranges[1]:
                 cut_str = "2068-03-29"
@@ -132,6 +145,7 @@ if __name__ == "__main__":
             adj_ds = bias_ds.copy()
             adj_ds[wrf_var].values = bias_ds[wrf_var].values - deltas_da.values
             adj_ds = adj_ds.assign(date=lambda x: convert_date(adj_ds.date.values, epoch))
+            adj_ds[wrf_var].values[adj_ds[wrf_var].values == -9999] = np.nan
             adj_ds = add_metadata(
                 adj_ds, wrf_var, long_name, title, src_str.format(gcm_lu[gcm]), epoch
             )

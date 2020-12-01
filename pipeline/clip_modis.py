@@ -62,7 +62,7 @@ if __name__ == "__main__":
     # check environment
     _ = check_env()
     parser = argparse.ArgumentParser(
-        description="Extract the date ranges of historical 8-day MODIS data"
+        description="Clip processed MODIS data to the 1km WRF grid"
     )
     parser.add_argument(
         "-n",
@@ -84,16 +84,20 @@ if __name__ == "__main__":
     # output directory for bands
     out_bands_dir_tp = os.path.join(scratch_dir, "MODIS", "clipped", mod_var, "{}")
     # output directory for datasets
-    out_dir = os.path.join(out_base_dir, "MODIS", "aligned", mod_var)
+    out_dir = os.path.join(out_base_dir, "aligned-WRF-MODIS", "MODIS")
     if not os.path.exists(out_dir):
         _ = os.makedirs(out_dir)
-    template_fp = os.path.join(scratch_dir, "ancillary", "wrf_3338_template.tif")
+    
     # make cutline fp
+    template_fp = os.path.join(scratch_dir, "ancillary", "wrf_3338_template.tif")
     shp_fp = make_cutline(template_fp, temp_dir)
+    
     # stuff for metadata
-    src_str = "{}.006 land surface temperature"
+    src_str = "{}.006 land surface temperature, tiles 11, 12"
     title = "1km WRF-aligned MODIS LST"
     long_name = "Land surface temperature"
+    
+    # clip data for each sensor
     sensors = ["MOD11A2", "MYD11A2"]
     for sensor in sensors:
         # 1) clip individual GeoTIFFs
@@ -103,7 +107,8 @@ if __name__ == "__main__":
             _ = os.makedirs(out_bands_dir)
         print("Clipping MODIS GeoTIFFs to WRF", end="...")
         tic = time.perf_counter()
-        # clip all modis files
+        
+        # set up args for clipping in parallel
         clip_args = []
         for fp in modis_fps:
             fn = os.path.basename(fp).split("_")
@@ -113,20 +118,27 @@ if __name__ == "__main__":
                 fn = f"{mod_var}_{sensor}_InteriorAK_{jdate}_clipped.tif"
                 out_fp = os.path.join(out_bands_dir, fn)
                 clip_args.append((shp_fp, fp, out_fp))
+                
+        # clip in parallel
         pool = Pool(ncpus)
         bands_fps = pool.map(wrap_clip, clip_args)
         pool.close()
         pool.join()
+        
         duration = round(time.perf_counter() - tic, 1)
         print(f"done, duration: {duration}s")
+        
         # 2) assemble into NetCDFs
         print(f"Creating NetCDF dataset for {sensor}", end="...")
         tic = time.perf_counter()
+        
+        # read clipped bands in parallel
         pool = Pool(ncpus)
         out_arrs = pool.map(read_band, bands_fps)
         pool.close()
         pool.join()
         bands_arr = np.array(out_arrs)
+        
         with rio.open(bands_fps[0]) as tmp:
             new_meta = tmp.meta.copy()
             new_meta.update(count=bands_arr.shape[0])
@@ -135,9 +147,12 @@ if __name__ == "__main__":
             idy = np.arange(tmp.height)
             xc = tmp.xy(np.repeat(0, idx.shape), idx)[0]
             yc = tmp.xy(idy, np.repeat(0, idy.shape))[1]
+            
         # write to netcdf
         dates = get_dates(bands_fps)
         epoch = np.datetime64("2000-01-01")
+        # Fill missing data with NaN (default _FillValue)
+        bands_arr[bands_arr == 0] = np.nan
         ds = xr.Dataset(
             {mod_var: (["date", "yc", "xc"], bands_arr)},
             coords={"xc": xc, "yc": yc, "date": convert_date(dates, epoch),},
