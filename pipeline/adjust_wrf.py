@@ -21,26 +21,11 @@ def get_modis_period(np_dt):
     return (date - origin).days // 8
 
 
-def assign_nan(ds):
-    """Assign np.nan to values equal/close to zero in dataset
-    
-    args:
-        ds: xarray.dataset to assign NaN
-    
-    notes:
-        Values can be close to zero and from warping (reprojection)
-    """
-    # use globally defined wrf_var
-    ds[wrf_var].values[np.isclose(ds[wrf_var].values, 0)] = np.nan
-    return ds
-
-
 def compute_clim(ds):
     """Compute climatology for an aligned WRF dataset"""
     out_ds = ds.assign(date=lambda x: get_modis_period(ds.date.values))
     out_ds = out_ds.rename({"date": "modis_period"})
     return out_ds.tsk.groupby("modis_period").mean()
-    # return out_da.where(out_da != -9999)
 
 
 if __name__ == "__main__":
@@ -85,7 +70,6 @@ if __name__ == "__main__":
         era_out_ds = add_metadata(
             ds, wrf_var, long_name, title, src_str.format("ERA-Interim")
         )
-    era_out_ds = assign_nan(era_out_ds)
     era_out_ds.to_netcdf(era_out_fp)
     print(f"Adjusted ERA data saved to {era_out_fp}")
     
@@ -133,8 +117,6 @@ if __name__ == "__main__":
         # apply deltas to historical GCM dataset
         adj_ds = bias_ds.copy()
         adj_ds[wrf_var].values = bias_ds[wrf_var].values - deltas_da.values
-        # Set missing data to NaN (default NetCDF _FillValue)
-        adj_ds = assign_nan(adj_ds)
         adj_ds = add_metadata(
             adj_ds, wrf_var, long_name, title, src_str.format(gcm_lu[gcm])
         )
@@ -156,8 +138,6 @@ if __name__ == "__main__":
                 bias_ds = ds.where(ds.date >= np.datetime64(cut_str), drop=True)
             adj_ds = bias_ds.copy()
             adj_ds[wrf_var].values = bias_ds[wrf_var].values - deltas_da.values
-            # adj_ds[wrf_var].values[adj_ds[wrf_var].values == -9999] = np.nan
-            adj_ds = assign_nan(adj_ds)
             adj_ds = add_metadata(
                 adj_ds, wrf_var, long_name, title, src_str.format(gcm_lu[gcm])
             )
