@@ -119,6 +119,8 @@ plot_aggr_woy <- function(extr_args, lonlat) {
 #-- Main ----------------------------------------------------------------------
 # setup
 out_dir = file.path(Sys.getenv("OUTPUT_DIR"))
+# OUTPUT_DIR must be set
+if (out_dir == "") stop("$OUTPUT_DIR must be set")
 tsk_dir <- file.path(out_dir, "aligned-WRF-MODIS", "WRF")
 lst_dir <- file.path(out_dir, "aligned-WRF-MODIS", "MODIS")
 
@@ -163,16 +165,6 @@ option_list = list(
 opt = parse_args(OptionParser(option_list=option_list))   
 lon <- opt$lon
 lat <- opt$lat
-# stop if neither out file or $OUTPUT_DIR are set, otherwise set it
-if (opt$`out-file` == "") {
-  if (out_dir == "") stop("$OUTPUT_DIR must be set if --out-file not used")
-  out_fp <- file.path(
-    out_dir, "plots", paste0(
-      "aligned_data_comparison_", 
-      lat, "N", abs(lon), "W.png"
-    )
-  )
-} else {out_fp <- opt$`out-file`}
 
 # source WRF files with args for later 
 nc_args = list()
@@ -206,6 +198,16 @@ if (opt$myd) {
       lst_dir, "lst", "MYD-LST"
   )
 }
+                           
+if (opt$`out-file` == "") {
+  fp_mod_names = paste(names(nc_args), collapse = "_")
+  out_fp <- file.path(
+    out_dir, "plots", paste0(
+      "aligned_data_comparison_",
+      fp_mod_names, lat, "N", abs(lon), "W.png"
+    )
+  )
+} else {out_fp <- opt$`out-file`}
     
 # create plot
 p <- plot_aggr_woy(nc_args, c(lon, lat))
@@ -216,3 +218,4 @@ ggsave(out_fp, p, "png", height=5)
 cat(out_fp, "\n")
 
 #------------------------------------------------------------------------------
+
