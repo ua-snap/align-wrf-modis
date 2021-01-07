@@ -58,7 +58,14 @@ In many of the scripts, you may specify the number of cores to use for program e
 
 Aligned data for MODIS and WRF will be saved in: `$OUTPUT_DIR/MODIS` and `$OUTPUT_DIR/WRF`, repsectively. 
 
-### 4.) Using the R script:
+### 4.) Other scripts
+
+The `./scripts` directory contains a script for plotting data (in the `R/` subdirectory) along with some jupyter notebooks with supporting info in the `ancillary` subdirectory. Use of the R script is explained below. Here is a brief description of the scripts in the `ancillary` dir:
+
+`explore_deltas.ipynb`: Assessments of the delta correction method applied for some sample data.
+`explore_modis_dates.ipynb`: Demonstrates that the MODIS Terra 8-day dates is a superset of the Aqua dates.
+
+### 5.) Using the R script:
 
 This script relies on having the `$OUTPUT_DIR` environmental variable set for finding the data. This needs to be set to the path containing those output directories, `WRF/` and `MODIS/`. E.g., run `export OUTPUT_DIR=/path/to/folder` before running using this script.
 
@@ -81,7 +88,7 @@ This will create a plot of the aligned WRF ERA-Interim TSK and MODIS LST values 
 `WRF_DIR` should be the path to the directory containing the 1km WRF TSK data. This directory should be structured in the following way:
 
 ```
-$WRF_DIR/
+$WRF_1KM_DIR/
   ccsm/
     2007/
     2008/
