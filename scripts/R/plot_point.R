@@ -200,11 +200,12 @@ if (opt$myd) {
 }
                            
 if (opt$`out-file` == "") {
-  fp_mod_names = paste(names(nc_args), collapse = "_")
+  fp_mod_names <- paste(names(nc_args), collapse = "_")
   out_fp <- file.path(
-    out_dir, "plots", paste0(
+    out_dir, "plots", 
+    paste0(
       "aligned_data_comparison_",
-      fp_mod_names, lat, "N", abs(lon), "W.png"
+      fp_mod_names, "_", lat, "N", abs(lon), "W.png"
     )
   )
 } else {out_fp <- opt$`out-file`}
